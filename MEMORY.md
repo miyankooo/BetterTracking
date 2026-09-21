@@ -12,7 +12,8 @@ The single persistent note for this addon. Read it before touching the code inst
 
 | Item | State |
 |---|---|
-| Version | 1.0.0, **not committed**, no repo yet |
+| Version | 1.0.0, **committed and pushed**, working tree clean at `5947015` |
+| Repo | `github.com/miyankooo/TrackingAlert`, branch `main`, public, **no licence** |
 | Targets | WoW Forever 1.60.x only. `## Interface: 16001`, game type camelot |
 | Size | 875 lines: `Core/Config.lua` 52, `Core/Probe.lua` 116, `Core/Geometry.lua` 91, `Core/Scanner.lua` 202, `UI/Options.lua` 113, `Tools/harness.lua` 210, toc 18, README 73 |
 | Sources verified | `Gethe/wow-ui-source` `forever` @ `70ef1b2` and the string table of the installed beta binary |
@@ -24,6 +25,7 @@ The single persistent note for this addon. Read it before touching the code inst
 
 ## 2. How to resume
 
+0. `git status` — expect a clean tree at `5947015`. Everything is pushed.
 1. Log in, gather with Find Herbs or Find Minerals up.
 2. Hover a blip near the **minimap edge**. Expect a chat line saying it calibrated, naming one of the three spaces.
 3. If nothing prints, `/tra calibrate` and read the failure reason. If it says no candidate reproduced the hit, section 4 is wrong and the mechanism needs rethinking.
