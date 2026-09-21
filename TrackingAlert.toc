@@ -1,0 +1,18 @@
+## Interface: 16001
+## Title: Tracking Alert
+## Notes: Plays a ping the moment a new tracked node blip appears on the minimap.
+## Author: miyanko
+## Version: 1.0.0
+## IconTexture: 133706
+## SavedVariables: TrackingAlertDB
+## X-Category: Map & Minimap
+
+# Load order is the dependency order: Config owns the saved settings, Probe owns the one undocumented
+# thing in this addon (the coordinate space of the engine hit test), Geometry turns the minimap into
+# points and world positions, and Scanner drives the probes and decides what is new enough to ping.
+
+Core\Config.lua
+Core\Probe.lua
+Core\Geometry.lua
+Core\Scanner.lua
+UI\Options.lua
