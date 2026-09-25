@@ -1,6 +1,8 @@
 local _, ns = ...
 
 local RING_INSET = 6
+local RING_POINTS = 64
+local DISC_SPACING = 8
 local MERGE_PIXELS = 20
 
 local ring = {}
@@ -19,22 +21,20 @@ local function Build()
   wipe(disc)
 
   local edge = radius - RING_INSET
-  local count = ns.db.ringPoints
-  for index = 1, count do
-    local angle = (index / count) * math.pi * 2
+  for index = 1, RING_POINTS do
+    local angle = (index / RING_POINTS) * math.pi * 2
     ring[index] = { math.cos(angle) * edge, math.sin(angle) * edge }
   end
 
-  local spacing = ns.db.discSpacing
   disc[1] = { 0, 0 }
-  local step = spacing
+  local step = DISC_SPACING
   while step <= edge do
-    local perRing = math.max(6, math.floor(2 * math.pi * step / spacing))
+    local perRing = math.max(6, math.floor(2 * math.pi * step / DISC_SPACING))
     for index = 1, perRing do
       local angle = (index / perRing) * math.pi * 2
       disc[#disc + 1] = { math.cos(angle) * step, math.sin(angle) * step }
     end
-    step = step + spacing
+    step = step + DISC_SPACING
   end
 end
 

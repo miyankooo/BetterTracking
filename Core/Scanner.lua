@@ -1,32 +1,21 @@
 local _, ns = ...
 
-local SEEN_LIFETIME = 600
-
 local remembered = {}
 local keyed = {}
 local queue, queueIndex, queueSilent = nil, 1, false
-local lastDisc, lastAlert, lastCalibrate = 0, 0, 0
+local lastDisc, lastCalibrate = 0, 0
 local primeNext = true
 
 ns.observedTypes = {}
 
-local function Alert()
-  local now = GetTime()
-  if now - lastAlert < ns.db.cooldown then return end
-
-  lastAlert = now
-  PlaySound(ns.db.sound or SOUNDKIT.MAP_PING, ns.db.channel)
-end
-
 -- Gathering nodes are GameObjects. Units are party members, NPCs and the townsfolk blips, which are
--- noise here. Untyped data is kept by default because blip tooltips may carry no type at all, and
--- refusing them would leave the addon silent for the very thing it exists to catch.
+-- noise here. Untyped data is kept because blip tooltips may carry no type at all, and refusing them
+-- would leave the addon silent for the very thing it exists to catch.
 local function IsWanted(data)
   local dataType = data.type
   ns.observedTypes[dataType == nil and "untyped" or dataType] = true
 
-  if not ns.db.objectsOnly then return true end
-  if dataType == nil then return ns.db.allowUntyped end
+  if not ns.db.objectsOnly or dataType == nil then return true end
   return dataType == Enum.TooltipDataType.Object
 end
 
@@ -79,11 +68,11 @@ local function Consider(data, dx, dy, silent)
     end
   end
 
-  if not silent then Alert() end
+  if not silent then ns.Alert() end
 end
 
 local function Prune()
-  local cutoff = GetTime() - SEEN_LIFETIME
+  local cutoff = GetTime() - ns.REMEMBER_FOR
 
   for key, stamp in pairs(keyed) do
     if stamp < cutoff then keyed[key] = nil end
@@ -126,10 +115,8 @@ local function TryCalibrate()
   end
 end
 
-local driver = CreateFrame("Frame")
-
-driver:SetScript("OnUpdate", function()
-  if not ns.db.enabled then return end
+local function OnUpdate()
+  if not ns.db.blips then return end
 
   -- Probing rewrites the engine's minimap mouseover, so a cursor that is genuinely on the minimap wins.
   -- That idle moment is also the only chance to work out the coordinate space, so take it.
@@ -138,7 +125,7 @@ driver:SetScript("OnUpdate", function()
     return
   end
 
-  if not ns.db.space then return end
+  if not ns.db.space or not ns.CanAlert() then return end
   if ns.db.requireMovement and GetUnitSpeed("player") == 0 then return end
 
   if not queue or queueIndex > #queue then Refill() end
@@ -152,25 +139,19 @@ driver:SetScript("OnUpdate", function()
     if data then Consider(data, point[1], point[2], queueSilent) end
     queueIndex = queueIndex + 1
   end
-end)
+end
 
-driver:RegisterEvent("PLAYER_ENTERING_WORLD")
-driver:RegisterEvent("ZONE_CHANGED_NEW_AREA")
-driver:RegisterEvent("MINIMAP_UPDATE_ZOOM")
-driver:RegisterEvent("MINIMAP_UPDATE_TRACKING")
-driver:RegisterEvent("VIGNETTE_MINIMAP_UPDATED")
-
-driver:SetScript("OnEvent", function(_, event, vignetteGUID, onMinimap)
+local function OnEvent(_, event, vignetteGUID, onMinimap)
   -- Vignettes are a separate channel that reports minimap arrival directly. Vanilla content probably
   -- never uses them, but the event costs nothing when it never fires and covers rares and treasures
   -- if Forever does.
   if event == "VIGNETTE_MINIMAP_UPDATED" then
-    if not ns.db.enabled or not ns.db.vignettes then return end
+    if not ns.db.blips or not ns.db.vignettes or not ns.CanAlert() then return end
 
     if onMinimap then
       if not keyed[vignetteGUID] then
         keyed[vignetteGUID] = GetTime()
-        Alert()
+        ns.Alert()
       end
     else
       keyed[vignetteGUID] = nil
@@ -186,7 +167,19 @@ driver:SetScript("OnEvent", function(_, event, vignetteGUID, onMinimap)
   ns.RebuildGeometry()
   primeNext = true
   queue = nil
-end)
+end
+
+-- Without the engine hit test there is nothing to scan, so the driver never starts.
+if ns.canProbe then
+  local driver = CreateFrame("Frame")
+  driver:SetScript("OnUpdate", OnUpdate)
+  driver:SetScript("OnEvent", OnEvent)
+  driver:RegisterEvent("PLAYER_ENTERING_WORLD")
+  driver:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+  driver:RegisterEvent("MINIMAP_UPDATE_ZOOM")
+  driver:RegisterEvent("MINIMAP_UPDATE_TRACKING")
+  driver:RegisterEvent("VIGNETTE_MINIMAP_UPDATED")
+end
 
 function ns.ResetSeen()
   wipe(remembered)

@@ -1,5 +1,11 @@
 local _, ns = ...
 
+-- 1.60.1 has the hit test, the minimap tooltip and the view radius. Checking them once costs nothing and
+-- turns a client that drops one into an idle blip source instead of an error on every frame.
+ns.canProbe = Minimap.UpdateMouseoverAtPoint ~= nil
+  and C_TooltipInfo ~= nil and C_TooltipInfo.GetMinimapMouseover ~= nil
+  and C_Minimap ~= nil and C_Minimap.GetViewRadius ~= nil
+
 -- Minimap blips are drawn by the engine and are not Lua objects, so the only documented way to read one
 -- is to run the engine's own hit test at a point and then ask for the tooltip it produced.
 -- UpdateMouseoverAtPoint is documented as two bare numbers with no stated coordinate space, so which of
@@ -11,19 +17,6 @@ ns.spaces = {
 }
 
 local failedSpaces = {}
-local available
-
-local function IsAvailable()
-  if available == nil then
-    available = type(Minimap.UpdateMouseoverAtPoint) == "function"
-      and type(C_TooltipInfo) == "table"
-      and type(C_TooltipInfo.GetMinimapMouseover) == "function"
-    if not available then
-      ns.Print("this client has no minimap hit test, scanning is off.")
-    end
-  end
-  return available
-end
 
 local function ToSpace(dx, dy, space)
   local halfWidth, halfHeight = Minimap:GetWidth() / 2, Minimap:GetHeight() / 2
@@ -39,7 +32,7 @@ end
 -- A space whose arguments the engine rejects is dropped for the session, so a wrong guess costs one
 -- error instead of one per probe.
 function ns.ProbeAt(dx, dy, space)
-  if not IsAvailable() or failedSpaces[space] then return nil end
+  if failedSpaces[space] then return nil end
 
   local x, y = ToSpace(dx, dy, space)
   if not pcall(Minimap.UpdateMouseoverAtPoint, Minimap, x, y) then
@@ -48,8 +41,7 @@ function ns.ProbeAt(dx, dy, space)
   end
 
   local data = C_TooltipInfo.GetMinimapMouseover()
-  if not data or not data.lines or not data.lines[1] then return nil end
-  return data
+  if ns.BlipName(data) then return data end
 end
 
 function ns.Probe(dx, dy)
@@ -83,7 +75,7 @@ end
 -- same tooltip from the cursor's own offset and misses at the mirrored offset, which is what rules out
 -- a space that merely happened to land on something else.
 function ns.CalibrateFromCursor(quiet)
-  if not IsAvailable() then return false, "no minimap hit test on this client" end
+  if not ns.canProbe then return false, "this client has no minimap hit test" end
   if not Minimap:IsMouseOver() then return false, "hover a tracked blip on the minimap first" end
 
   local wanted = ns.BlipName(C_TooltipInfo.GetMinimapMouseover())
@@ -113,4 +105,16 @@ function ns.CalibrateFromCursor(quiet)
 
   ns.RestoreCursorMouseover()
   return false, "no candidate coordinate space reproduced the hit"
+end
+
+-- The next idle hover over a blip calibrates again, so forgetting is all a recalibration needs.
+function ns.Recalibrate()
+  ns.db.space = false
+  ns.Print("calibration cleared, hover a tracked blip near the minimap edge to calibrate.")
+end
+
+function ns.SpaceLabel()
+  for _, space in ipairs(ns.spaces) do
+    if space.key == ns.db.space then return space.label end
+  end
 end
