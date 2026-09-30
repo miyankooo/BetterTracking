@@ -90,6 +90,13 @@ Nothing to do:
   - Reset (Remembered nodes) forgets the blip source's own entries only. A node GatherMate2 also remembers stays quiet.
   - Harness: blip then circle pings once, circle then blip pings once, another kind inside the radius still pings, two different nodes ping twice, a node the blip keeps seeing stays one node past `REMEMBER_FOR`, both expiry paths re-arm, and zoning wipes the shared memory. Each case was mutation-tested.
 
+Owner decisions recorded 2026-09-30 (lead):
+
+- Remembered nodes → Reset and `/tra reset` now forget both sources: `ns.ResetGatherMateSeen` clears GatherMate2's per-circle table and its shared-memory entries. The tooltip count includes GatherMate2's circles (`ns.GatherMateSeenCount`). The harness checks it (90/90).
+- Cross-source matching stays name plus position, not position only, so a different kind of node inside the radius still alerts.
+- "Gathering nodes only" stays; its usefulness still waits on the in-game `/tra types` check.
+- The README has no Classic Era pointer: TrackingAlert is Forever only, and GatherMate2Alert is its own repo.
+
 ## Blockers, issues, challenges
 
 1. GatherMate2 has no Forever build: upstream `master` is `120007,120100` and `classic` is `11509,20506,50504` (checked 2026-09-30, last push 2026-08-17). The GatherMate2 source, which the owner keeps (TA-4), stays dormant until it ships. So does the cross-source memory's GatherMate2 half.
