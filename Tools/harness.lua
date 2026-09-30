@@ -88,6 +88,7 @@ _G.issecretvalue = function(value) return value == SECRET end
 _G.PlaySound = function(id) alerts[#alerts + 1] = id end
 _G.NONE, _G.ALL, _G.SECOND_ONELETTER_ABBR = "None", "All", "%d s"
 _G.RED_FONT_COLOR = { WrapTextInColorCode = function(_, text) return text end }
+_G.YELLOW_FONT_COLOR = { WrapTextInColorCode = function(_, text) return text end }
 
 local frames = {}
 _G.CreateFrame = function()
