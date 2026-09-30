@@ -1,6 +1,5 @@
 local _, ns = ...
 
-local remembered = {}
 local keyed = {}
 local queue, queueIndex, queueSilent = nil, 1, false
 local lastDisc, lastCalibrate = 0, 0
@@ -20,23 +19,13 @@ local function IsWanted(data)
   return dataType == Enum.TooltipDataType.Object or dataType == Enum.TooltipDataType.MinimapMouseover
 end
 
--- Bucketed keys were the first attempt and broke on exactly this: a node straddling a bucket edge
--- alerted twice. Proximity matching makes the tolerance explicit, and Geometry scales it with zoom.
+-- Without a world position the best available identity is the key alone, which collapses every node of
+-- one kind into a single alert rather than guessing, and cannot meet the other source.
+local function RememberKey(key)
+  if keyed[key] then return false end
 
--- Re-seeing a node refreshes its stamp, so a node you are parked next to never ages out and pings again.
-local function Recall(name, x, y)
-  local tolerance = ns.MergeYards()
-
-  for _, node in ipairs(remembered) do
-    if node.name == name then
-      local dx, dy = node.x - x, node.y - y
-      if dx * dx + dy * dy <= tolerance * tolerance then
-        node.stamp = GetTime()
-        return true
-      end
-    end
-  end
-  return false
+  keyed[key] = GetTime()
+  return true
 end
 
 local function Consider(data, dx, dy, silent)
@@ -45,43 +34,28 @@ local function Consider(data, dx, dy, silent)
   local name = ns.BlipName(data)
   if not name then return end
 
-  local now = GetTime()
-
-  -- A guid is an exact identity and needs none of the position maths, so prefer it when the blip
-  -- tooltip happens to carry one. A secret guid cannot be a key, so it falls back to the position.
+  -- A guid is an exact identity, so it tells apart two nodes of one kind when the blip tooltip happens to
+  -- carry one. A secret guid cannot be a key, so the name stands in.
   local guid = data.guid
-  if guid and not ns.IsSecret(guid) then
-    if keyed[guid] then return end
+  local key = guid and not ns.IsSecret(guid) and guid or name
 
-    keyed[guid] = now
+  local isNew
+  local x, y = ns.WorldFromOffset(dx, dy)
+  if x then
+    isNew = ns.SightNode("blip", key, name, x, y)
   else
-    local x, y = ns.WorldFromOffset(dx, dy)
-
-    -- Without a world position the best available identity is the name, which collapses every node of
-    -- one kind into a single alert rather than guessing.
-    if not x then
-      if keyed[name] then return end
-
-      keyed[name] = now
-    else
-      if Recall(name, x, y) then return end
-
-      remembered[#remembered + 1] = { name = name, x = x, y = y, stamp = now }
-    end
+    isNew = RememberKey(key)
   end
 
-  if not silent then ns.Alert() end
+  if isNew and not silent then ns.Alert() end
 end
 
+-- Positioned nodes age out in the shared memory, so only the keys kept here need pruning.
 local function Prune()
   local cutoff = GetTime() - ns.REMEMBER_FOR
 
   for key, stamp in pairs(keyed) do
     if stamp < cutoff then keyed[key] = nil end
-  end
-
-  for index = #remembered, 1, -1 do
-    if remembered[index].stamp < cutoff then tremove(remembered, index) end
   end
 end
 
@@ -186,13 +160,13 @@ driver:RegisterEvent("MINIMAP_UPDATE_TRACKING")
 driver:RegisterEvent("VIGNETTE_MINIMAP_UPDATED")
 
 function ns.ResetSeen()
-  wipe(remembered)
   wipe(keyed)
+  ns.ForgetNodes("blip")
   Reprime()
 end
 
 function ns.SeenCount()
-  local count = #remembered
+  local count = ns.NodeCount("blip")
   for _ in pairs(keyed) do count = count + 1 end
   return count
 end

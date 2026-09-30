@@ -12,13 +12,15 @@
 ## AddonCompartmentFuncOnLeave: TrackingAlert_OnLeave
 
 # Load order is the dependency order: Config owns the saved settings, Alert owns the one alert output and
-# the zoning handler both sources share, Probe, Geometry and Scanner are the minimap blip source,
-# GatherMate is the optional GatherMate2 source, and the UI files build on all of them.
+# the zoning handler both sources share, Probe and Geometry read the minimap, Memory is the node memory both
+# sources share, Scanner is the minimap blip source, GatherMate is the optional GatherMate2 source, and the
+# UI files build on all of them.
 
 Core\Config.lua
 Core\Alert.lua
 Core\Probe.lua
 Core\Geometry.lua
+Core\Memory.lua
 Core\Scanner.lua
 Core\GatherMate.lua
 UI\Options.lua

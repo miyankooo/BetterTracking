@@ -127,10 +127,21 @@ _G.C_Minimap = {
   GetViewRadius = function() return VIEW_RADIUS end,
   IsRotateMinimapIgnored = function() return rotateIgnored end,
 }
+-- One fake zone laid out like the game's: map x runs east and map y south, while world x runs north and
+-- world y west. Both sources convert through it, so a mix-up of axes would break the cross-source match.
+local ZONE_YARDS, ZONE_TOP, ZONE_LEFT = 2000, 1000, 1000
+
+local function MapFromWorld(x, y)
+  return (ZONE_LEFT - y) / ZONE_YARDS, (ZONE_TOP - x) / ZONE_YARDS
+end
+
+_G.CreateVector2D = function(x, y) return { x = x, y = y } end
 _G.C_Map = {
   GetBestMapForUnit = function() return 1 end,
-  GetPlayerMapPosition = function() return { x = 0.5, y = 0.5 } end,
-  GetWorldPosFromMapPos = function() return 1, { x = player.x, y = player.y } end,
+  GetPlayerMapPosition = function() return CreateVector2D(MapFromWorld(player.x, player.y)) end,
+  GetWorldPosFromMapPos = function(_, pos)
+    return 1, CreateVector2D(ZONE_TOP - pos.y * ZONE_YARDS, ZONE_LEFT - pos.x * ZONE_YARDS)
+  end,
 }
 
 -- A fake GatherMate2 whose Display calls the hook the way addMiniPin does, once per pin per update.
@@ -553,6 +564,80 @@ Fire("ZONE_CHANGED_NEW_AREA")
 clock = clock + 6
 hooks.addMiniPin(display, ore)
 Check("a zone change forgets GatherMate2 circles", #alerts == 1, #alerts .. " alerts")
+
+-- A circle for a real node, carrying the zone coordinates and node name GatherMate2 gives its minimap pins.
+local function PlacedPin(nodeType, coords, node, name)
+  local pin = Pin(nodeType, coords, true)
+  pin.zone, pin.title = 1, name or node.name
+  pin.x, pin.y = MapFromWorld(node.x, node.y)
+  return pin
+end
+
+-- One node at a time, so the cooldown never folds two alerts into one and every count is exact.
+print("one ping per node across sources")
+local allNodes = world
+local silverleaf, copper = allNodes[2], allNodes[4]
+ns.db.blips, ns.db.circleSize = true, 1
+clock = clock + 10
+
+world = { silverleaf }
+alerts = {}
+WalkInCount()
+local blipFirst = #alerts
+clock = clock + 5
+hooks.addMiniPin(display, PlacedPin("Herb Gathering", 5100, silverleaf))
+Check("a blip then a GatherMate2 circle for the same node pings once", blipFirst == 1 and #alerts == 1, blipFirst .. " then " .. #alerts)
+
+clock = clock + 5
+hooks.addMiniPin(display, PlacedPin("Mining", 5200, { x = silverleaf.x + 10, y = silverleaf.y }, "Tin Vein"))
+Check("another kind of node inside the merge radius still pings", #alerts == 2, #alerts .. " alerts")
+
+clock = clock + 5
+hooks.addMiniPin(display, PlacedPin("Mining", 5300, copper))
+Check("two different nodes still ping twice", #alerts == 3, #alerts .. " alerts")
+
+world = { copper }
+player.x, player.y = 0, 500
+ns.ResetSeen()
+Tick(100)
+alerts = {}
+clock = clock + ns.REMEMBER_FOR + 1
+local copperCircle = PlacedPin("Mining", 5400, copper)
+hooks.addMiniPin(display, copperCircle)
+clock = clock + 5
+WalkInCount()
+Check("a GatherMate2 circle then a blip for the same node pings once", #alerts == 1, #alerts .. " alerts")
+Check("and the blip refreshes the circle's node instead of adding one", ns.SeenCount() == 0, ns.SeenCount() .. " blip nodes")
+Tick(60 * (ns.REMEMBER_FOR + 10))
+hooks.addMiniPin(display, copperCircle)
+Check("a node the blip keeps seeing stays one node past REMEMBER_FOR", #alerts == 1, #alerts .. " alerts")
+
+-- The blip's node is still in the shared memory but stale, so a new circle for it is a new sighting.
+world = { silverleaf }
+alerts = {}
+clock = clock + 5
+WalkInCount()
+player.x, player.y = 0, 500
+Tick(100)
+clock = clock + ns.REMEMBER_FOR + 1
+hooks.addMiniPin(display, PlacedPin("Herb Gathering", 5500, silverleaf))
+Check("after REMEMBER_FOR the same node alerts again", #alerts == 2, #alerts .. " alerts")
+clock = clock + 5
+hooks.addMiniPin(display, copperCircle)
+Check("and a circle GatherMate2 still shows re-arms the same way", #alerts == 3, #alerts .. " alerts")
+
+world = { copper }
+alerts = {}
+clock = clock + 5
+hooks.addMiniPin(display, PlacedPin("Mining", 5600, copper))
+Fire("ZONE_CHANGED_NEW_AREA")
+clock = clock + 6
+WalkInCount()
+Check("a zone change forgets the shared memory too", #alerts == 2, #alerts .. " alerts")
+
+world = allNodes
+player.x, player.y = 0, 0
+ns.db.blips = false
 
 print("settings panel")
 local built, buildError = BuildPanel()

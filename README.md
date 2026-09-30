@@ -13,7 +13,7 @@ It listens to two sources, and you switch each one on or off by itself:
 
 **Catches the arrival, not the presence.** A node that was already on screen stays quiet. Only a node that just came into range makes a sound.
 
-**One alert per node.** Walking away and coming back, circling a node, or sweeping past it a dozen times all stay silent for three minutes after you last saw it.
+**One alert per node.** Walking away and coming back, circling a node, or sweeping past it a dozen times all stay silent for three minutes after you last saw it. A node that both the minimap and GatherMate2 report alerts once, whichever sees it first.
 
 **One alert for a cluster.** A cooldown folds a group of nodes into a single ping.
 
@@ -70,7 +70,7 @@ The page uses the game's own settings list. Indented rows belong to the switch a
 | Full sweep | 5 s | How often the whole minimap is swept, for nodes that spawn inside the radius |
 | Probes per frame | 8 | Work per frame. Lower is cheaper and slower to react |
 | Calibration | Calibrate / Recalibrate | Forgets the calibration, so the next hover detects it again. The tooltip shows the current state |
-| Remembered nodes | Reset | Forgets every remembered minimap node. The tooltip shows how many |
+| Remembered nodes | Reset | Forgets every remembered minimap node. The tooltip shows how many. A node GatherMate2 also remembers stays quiet |
 
 ### GatherMate2
 
@@ -113,6 +113,8 @@ GatherMate2 is optional. Nothing needs it, and its source switches on by itself 
 **The minimap source may pause in restricted content.** Where the game hides your speed or a blip's name, the addon cannot read them, so it skips the scan (with **Only while moving** on) or that blip.
 
 **Two minimap nodes of the same kind close together count as one.**
+
+**The two sources recognise a shared node by name and position.** A minimap blip and a GatherMate2 circle count as one node when they carry the same node name and sit close together. Another kind of node close by still alerts. Without a map position, as in some instances, each source keeps to itself.
 
 **With a rotating minimap** the minimap source needs your facing to place a node. When the game does not supply it, it falls back to one alert per node type until it recovers.
 
