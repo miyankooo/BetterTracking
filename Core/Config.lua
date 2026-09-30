@@ -45,7 +45,7 @@ function ns.OnSettingsLoaded(callback)
 end
 
 function ns.Print(message)
-  print("|cff7FD4FF" .. ns.title .. "|r " .. message)
+  print(YELLOW_FONT_COLOR:WrapTextInColorCode("[" .. ns.title .. "]:") .. " " .. message)
 end
 
 -- Restricted content can hand values out as secrets, which break comparisons and table keys. issecretvalue

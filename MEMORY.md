@@ -73,6 +73,8 @@ Nothing to do:
 - The map maths is correct.
 - `.pkgmeta` excludes the harness.
 
+Chat output (owner decision 2026-09-30): lines start with the shared yellow `[Tracking Alert]:` prefix from `YELLOW_FONT_COLOR`; no hex colour codes remain. The harness stubs the colour object.
+
 ## Blockers, issues, challenges
 
 1. GatherMate2 has no Forever build: upstream `master` is `120007,120100` and `classic` is `11509,20506,50504` (checked 2026-09-30, last push 2026-08-17). The GatherMate2 source stays dormant until it ships (TA-4).
