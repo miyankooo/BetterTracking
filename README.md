@@ -70,7 +70,7 @@ The page uses the game's own settings list. Indented rows belong to the switch a
 | Full sweep | 5 s | How often the whole minimap is swept, for nodes that spawn inside the radius |
 | Probes per frame | 8 | Work per frame. Lower is cheaper and slower to react |
 | Calibration | Calibrate / Recalibrate | Forgets the calibration, so the next hover detects it again. The tooltip shows the current state |
-| Remembered nodes | Reset | Forgets every remembered minimap node. The tooltip shows how many. A node GatherMate2 also remembers stays quiet |
+| Remembered nodes | Reset | Forgets every node both sources remember, minimap blips and GatherMate2 circles. The tooltip shows how many |
 
 ### GatherMate2
 
@@ -95,7 +95,7 @@ These rows are greyed out until GatherMate2 is installed and enabled.
 | `/tra recalibrate` | Forget the detected coordinate space and detect it again |
 | `/tra status` | Print whether alerts are on, the calibration, how many nodes it remembers, and whether GatherMate2 is attached |
 | `/tra types` | Print the tooltip types seen on blips so far |
-| `/tra reset` | Forget every remembered minimap node |
+| `/tra reset` | Forget every remembered node, from both sources |
 | `/tra test` | Play the alert sound and flash |
 
 ## Requirements

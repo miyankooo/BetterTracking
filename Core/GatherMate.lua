@@ -173,4 +173,23 @@ ns.OnSettingsLoaded(function()
   EventUtil.ContinueOnAddOnLoaded("GatherMate2", Attach)
 end)
 
+-- Forgets the circles GatherMate2 already alerted for, so a manual reset re-arms both sources at once.
+function ns.ResetGatherMateSeen()
+  wipe(seen)
+  ns.ForgetNodes("gathermate")
+end
+
+-- Counts the circles GatherMate2 still remembers; each keeps its node in the per-type table, whether or
+-- not it also sits in the shared memory.
+function ns.GatherMateSeenCount()
+  local cutoff = GetTime() - ns.REMEMBER_FOR
+  local count = 0
+  for _, byType in pairs(seen) do
+    for _, node in pairs(byType) do
+      if node.stamp >= cutoff then count = count + 1 end
+    end
+  end
+  return count
+end
+
 ns.OnZoning(function() wipe(seen) end)

@@ -113,12 +113,13 @@ local function OnCalibrate(button)
 end
 
 local function NodesTooltip()
-  return ("Forgets every node the minimap source remembers, %d right now, so each alerts again the next time it"
-    .. " comes into range."):format(ns.SeenCount())
+  return ("Forgets every node both sources remember, %d right now, so each alerts again the next time it"
+    .. " comes into range."):format(ns.SeenCount() + ns.GatherMateSeenCount())
 end
 
 local function ForgetNodes()
   ns.ResetSeen()
+  ns.ResetGatherMateSeen()
   ns.Print("forgot every remembered node.")
 end
 
