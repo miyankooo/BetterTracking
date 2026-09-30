@@ -2,18 +2,18 @@
 ## Title: Tracking Alert
 ## Notes: Pings when a tracked node blip or a GatherMate2 tracking circle appears on the minimap.
 ## Author: miyanko
-## Version: 2.0.0
+## Version: 2.1.0
+## Category: Map
 ## IconTexture: Interface\Icons\INV_Misc_Bell_01
 ## OptionalDeps: GatherMate2
 ## SavedVariables: TrackingAlertDB
 ## AddonCompartmentFunc: TrackingAlert_OnClick
 ## AddonCompartmentFuncOnEnter: TrackingAlert_OnEnter
 ## AddonCompartmentFuncOnLeave: TrackingAlert_OnLeave
-## X-Category: Map & Minimap
 
-# Load order is the dependency order: Config owns the saved settings, Alert owns the one alert output both
-# sources share, Probe, Geometry and Scanner are the minimap blip source, GatherMate is the optional
-# GatherMate2 source, and the UI files build on all of them.
+# Load order is the dependency order: Config owns the saved settings, Alert owns the one alert output and
+# the zoning handler both sources share, Probe, Geometry and Scanner are the minimap blip source,
+# GatherMate is the optional GatherMate2 source, and the UI files build on all of them.
 
 Core\Config.lua
 Core\Alert.lua

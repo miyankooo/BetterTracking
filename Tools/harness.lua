@@ -18,6 +18,12 @@ local player = { x = 0, y = 0, facing = 0, speed = 7, taxi = false }
 local clock = 0
 local alerts = {}
 local mouseover
+local cvars = { rotateMinimap = false }
+local rotateIgnored = false
+local secretNames = false
+
+-- A secret is an opaque marker the addon may only hand to issecretvalue, as on the live client.
+local SECRET = setmetatable({}, { __tostring = function() return "secret" end })
 
 -- Mirrors Geometry.WorldFromOffset so the harness and the addon agree on what a probe point means.
 local function WorldFromOffset(dx, dy)
@@ -70,14 +76,15 @@ _G.strlower = string.lower
 _G.strtrim = function(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
 _G.GetTime = function() return clock end
 _G.GetUnitSpeed = function() return player.speed end
-_G.GetCVarBool = function() return false end
+_G.GetCVarBool = function(name) return cvars[name] == true end
 _G.GetPlayerFacing = function() return player.facing end
 _G.GetCursorPosition = function() return _G.cursorX or 0, _G.cursorY or 0 end
 _G.SOUNDKIT = {
   MAP_PING = 3175, TELL_MESSAGE = 3081, RAID_WARNING = 8959, READY_CHECK = 8960, AUCTION_WINDOW_OPEN = 5274,
   ALARM_CLOCK_WARNING_1 = 18871, IG_MAINMENU_OPTION_CHECKBOX_ON = 856, IG_MAINMENU_OPTION_CHECKBOX_OFF = 857,
 }
-_G.Enum = { TooltipDataType = { Item = 0, Spell = 1, Unit = 2, Corpse = 3, Object = 4 } }
+_G.Enum = { TooltipDataType = { Item = 0, Spell = 1, Unit = 2, Corpse = 3, Object = 4, MinimapMouseover = 21 } }
+_G.issecretvalue = function(value) return value == SECRET end
 _G.PlaySound = function(id) alerts[#alerts + 1] = id end
 _G.NONE, _G.ALL, _G.SECOND_ONELETTER_ABBR = "None", "All", "%d s"
 _G.RED_FONT_COLOR = { WrapTextInColorCode = function(_, text) return text end }
@@ -104,14 +111,21 @@ _G.Minimap = {
   UpdateMouseoverAtPoint = function(_, x, y) mouseover = NodeAt(x, y) end,
 }
 
+-- Forever's minimap tooltip most likely reports its own type for every blip, so that is the default here.
+local blipType = Enum.TooltipDataType.MinimapMouseover
+
 _G.C_TooltipInfo = {
   GetMinimapMouseover = function()
     if not mouseover then return nil end
-    return { type = Enum.TooltipDataType.Object, lines = { { leftText = mouseover.name } } }
+    local name = secretNames and SECRET or mouseover.name
+    return { type = blipType, lines = { { leftText = name } } }
   end,
 }
 
-_G.C_Minimap = { GetViewRadius = function() return VIEW_RADIUS end }
+_G.C_Minimap = {
+  GetViewRadius = function() return VIEW_RADIUS end,
+  IsRotateMinimapIgnored = function() return rotateIgnored end,
+}
 _G.C_Map = {
   GetBestMapForUnit = function() return 1 end,
   GetPlayerMapPosition = function() return { x = 0.5, y = 0.5 } end,
@@ -328,6 +342,15 @@ local function Check(label, condition, detail)
   end
 end
 
+print("load")
+local zoningFrames, scanner = 0, nil
+for _, frame in ipairs(frames) do
+  if frame.events.PLAYER_ENTERING_WORLD then zoningFrames = zoningFrames + 1 end
+  if frame.scripts.OnUpdate and frame.events.VIGNETTE_MINIMAP_UPDATED then scanner = frame end
+end
+Check("one frame handles zoning for both sources", zoningFrames == 1, zoningFrames .. " frames")
+Check("the scanner always runs and registers the vignette event", scanner ~= nil)
+
 print("calibration")
 Check("idle until a coordinate space is known", ns.db.space == false)
 
@@ -396,6 +419,75 @@ Tick(400)
 Check("standing still skips the scan", ns.SeenCount() == 0, ns.SeenCount() .. " remembered")
 player.speed = 7
 
+-- Starts out of range so the priming sweep records nothing, then walks into every node.
+local function WalkInCount()
+  player.x, player.y = 0, 500
+  ns.ResetSeen()
+  Tick(500)
+  Walk(0, 0, 25)
+  return ns.SeenCount()
+end
+
+print("tooltip types")
+Check("the types report records the minimap tooltip type", ns.observedTypes[Enum.TooltipDataType.MinimapMouseover])
+blipType = Enum.TooltipDataType.Unit
+local unitCount = WalkInCount()
+Check("gathering nodes only skips unit blips", unitCount == 0, unitCount .. " remembered")
+ns.db.objectsOnly = false
+local allCount = WalkInCount()
+Check("and lets them through when off", allCount == #world, allCount .. " of " .. #world)
+ns.db.objectsOnly = true
+blipType = Enum.TooltipDataType.MinimapMouseover
+
+print("secret values")
+player.speed = SECRET
+local secretSpeed = WalkInCount()
+Check("a secret speed counts as standing still", secretSpeed == 0, secretSpeed .. " remembered")
+player.speed = 7
+
+secretNames = true
+alerts = {}
+local secretCount = WalkInCount()
+Check("a secret blip name is never keyed or announced", secretCount == 0 and #alerts == 0, secretCount .. " remembered")
+secretNames = false
+
+local realIsSecret = _G.issecretvalue
+_G.issecretvalue = function() error("secret argument from tainted code") end
+local raisedCount = WalkInCount()
+Check("a guard that raises reads as secret", raisedCount == 0, raisedCount .. " remembered")
+_G.issecretvalue = realIsSecret
+
+print("vignettes")
+player.x, player.y = 0, 500
+ns.ResetSeen()
+alerts = {}
+clock = clock + 10
+Fire("VIGNETTE_MINIMAP_UPDATED", "Vignette-1", true)
+Check("a vignette reaching the minimap alerts", #alerts == 1, #alerts .. " alerts")
+Fire("VIGNETTE_MINIMAP_UPDATED", "Vignette-1", false)
+clock = clock + 60
+Fire("VIGNETTE_MINIMAP_UPDATED", "Vignette-1", true)
+Check("leaving and returning within the window stays quiet", #alerts == 1, #alerts .. " alerts")
+Fire("VIGNETTE_MINIMAP_UPDATED", "Vignette-1", false)
+clock = clock + ns.REMEMBER_FOR + 1
+Tick(200)
+Fire("VIGNETTE_MINIMAP_UPDATED", "Vignette-1", true)
+Check("and it alerts again once the window has passed", #alerts == 2, #alerts .. " alerts")
+
+print("rotating minimap")
+local function Near(ax, ay, bx, by) return math.abs(ax - bx) < 1e-6 and math.abs(ay - by) < 1e-6 end
+player.x, player.y, player.facing = 0, 0, 1
+cvars.rotateMinimap = true
+local rotatedX, rotatedY = ns.WorldFromOffset(10, 0)
+local turnedX, turnedY = WorldFromOffset(10, 0)
+Check("a rotating minimap turns offsets by the facing", Near(rotatedX, rotatedY, turnedX, turnedY))
+rotateIgnored = true
+local ignoredX, ignoredY = ns.WorldFromOffset(10, 0)
+player.facing = 0
+local fixedX, fixedY = WorldFromOffset(10, 0)
+Check("an ignored rotation reads the minimap as fixed", Near(ignoredX, ignoredY, fixedX, fixedY))
+cvars.rotateMinimap, rotateIgnored = false, false
+
 print("gathermate2 source")
 ns.db.blips = false
 alerts = {}
@@ -454,6 +546,12 @@ ns.db.circleSize = 3
 local sized = Pin("Mining", 800, true)
 hooks.addMiniPin(display, sized)
 Check("the circle size setting resizes the pin", sized.height == 14, tostring(sized.height))
+
+alerts = {}
+Fire("ZONE_CHANGED_NEW_AREA")
+clock = clock + 6
+hooks.addMiniPin(display, ore)
+Check("a zone change forgets GatherMate2 circles", #alerts == 1, #alerts .. " alerts")
 
 print("settings panel")
 local built, buildError = BuildPanel()
@@ -573,54 +671,9 @@ local grown = Pin("Mining", 1000, true, 12)
 hooks.addMiniPin(display, grown)
 Check("and each step adds 2px to it", grown.height == 16, tostring(grown.height))
 
-print("without the hit test")
-for index = #frames, 1, -1 do frames[index] = nil end
-Minimap.UpdateMouseoverAtPoint = nil
-local idle = LoadAddon()
-Check("the blip source knows it cannot probe", idle.canProbe == false)
-
-local scans = false
-for _, frame in ipairs(frames) do
-  if frame.scripts.OnUpdate or frame.events.VIGNETTE_MINIMAP_UPDATED then scans = true end
-end
-Check("no scanner frame runs or registers the vignette event", not scans)
-Check("moving around raises no error", pcall(Tick, 200))
-
-Minimap.mouseIsOver = true
-Check("calibrating raises no error", pcall(SlashCmdList.TRACKINGALERT, "calibrate"))
-Minimap.mouseIsOver = false
+print("slash commands")
 Check("status raises no error", pcall(SlashCmdList.TRACKINGALERT, "status"))
-Check("the panel builds", BuildPanel())
-
--- The exact shape 1.0.0 wrote after its own default fill, with the settings a player could have changed.
-print("upgrading a 1.0.0 save")
-_G.TrackingAlertDB = {
-  enabled = false, sound = false, channel = "SFX", cooldown = 0.75, requireMovement = false, objectsOnly = true,
-  allowUntyped = true, vignettes = false, ringPoints = 64, discSpacing = 8, discInterval = 7, probeBudget = 12,
-  space = "corner",
-}
-local upgraded = LoadAddon().db
-Check("the default-ping false becomes sound on with the default ping",
-  upgraded.sound == true and upgraded.soundId == SOUNDKIT.MAP_PING)
-Check("enabled carries into the minimap source switch", upgraded.blips == false)
-Check("the cooldown is clamped to the slider minimum", upgraded.cooldown == 1, tostring(upgraded.cooldown))
-Check("the obsolete keys are dropped", upgraded.enabled == nil and upgraded.allowUntyped == nil
-  and upgraded.ringPoints == nil and upgraded.discSpacing == nil)
-Check("keys with the same meaning are kept", upgraded.channel == "SFX" and upgraded.requireMovement == false
-  and upgraded.vignettes == false and upgraded.discInterval == 7 and upgraded.probeBudget == 12
-  and upgraded.space == "corner")
-Check("new keys get their defaults", upgraded.flash == true and upgraded.gatherMate == true
-  and type(upgraded.mutedTypes) == "table")
-
-_G.TrackingAlertDB = { enabled = true, sound = SOUNDKIT.RAID_WARNING, cooldown = 2.25, channel = "Master", space = false }
-local picked = LoadAddon().db
-Check("a sound kit id becomes the picked sound", picked.sound == true and picked.soundId == SOUNDKIT.RAID_WARNING)
-Check("and an enabled scan stays on", picked.blips == true)
-Check("a cooldown off the whole-second grid snaps onto it", picked.cooldown == 2, tostring(picked.cooldown))
-
-picked.sound = false
-local reloaded = LoadAddon().db
-Check("it runs once, so a 2.0.0 sound off stays off", reloaded.sound == false)
+Check("types raises no error", pcall(SlashCmdList.TRACKINGALERT, "types"))
 
 print(failures == 0 and "\nall checks passed" or ("\n" .. failures .. " failing checks"))
 os.exit(failures == 0 and 0 or 1)

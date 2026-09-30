@@ -67,7 +67,9 @@ function ns.WorldFromOffset(dx, dy)
   if not playerWorld then return nil end
 
   local facing = 0
-  if GetCVarBool("rotateMinimap") then
+
+  -- The client can ignore the rotation setting, and then the minimap is drawn fixed whatever the CVar says.
+  if GetCVarBool("rotateMinimap") and not C_Minimap.IsRotateMinimapIgnored() then
     facing = GetPlayerFacing()
 
     -- Documented as nilable, and a wrong facing would scatter one node across many keys, so give up
