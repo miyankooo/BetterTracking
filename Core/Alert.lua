@@ -1,7 +1,5 @@
 local addonName, ns = ...
 
--- Both sources remember a node this long after they last saw it, so walking away and back stays quiet.
-ns.REMEMBER_FOR = 180
 ns.GOLD = { 1, 0.82, 0 }
 
 local ZONING_QUIET = 5

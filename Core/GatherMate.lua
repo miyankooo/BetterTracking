@@ -79,6 +79,25 @@ local function MergeCircle(pin)
   mergeLeaders[#mergeLeaders + 1] = { pin = pin, coords = pin.coords, x = x, y = y, type = pin.nodeType }
 end
 
+-- GatherMate2 keeps each node's zone coordinates on its pin, and the conversion the blip source uses for the
+-- player turns them into the same world yards, so both sources can meet in the shared node memory.
+local function PinWorld(pin)
+  if not (pin.zone and pin.x and pin.y) then return nil end
+
+  local _, world = C_Map.GetWorldPosFromMapPos(pin.zone, CreateVector2D(pin.x, pin.y))
+  if world then return world.x, world.y end
+end
+
+-- A circle is keyed by its database entry and named with GatherMate2's node name, which is the game
+-- object's own name, so a blip of the same node matches it. Without a world position the circle can only
+-- stand for itself.
+local function SightPin(pin)
+  local x, y = PinWorld(pin)
+  if not x then return true, { stamp = GetTime() } end
+
+  return ns.SightNode("gathermate", pin.nodeType .. ":" .. pin.coords, pin.title, x, y)
+end
+
 -- The hook runs every frame for every pin, so anything that is not a circle bails out first. It runs
 -- right after addMiniPin's own Show, which is why hiding icon pins here wins.
 local function OnMiniPin(_, pin)
@@ -94,19 +113,27 @@ local function OnMiniPin(_, pin)
 
   if not ns.db.gatherMate or ns.db.mutedTypes[pin.nodeType] or not ns.CanAlert() then return end
 
-  local now = GetTime()
   local byType = seen[pin.nodeType]
   if not byType then
     byType = {}
     seen[pin.nodeType] = byType
   end
 
-  local lastSeen = byType[pin.coords]
-  byType[pin.coords] = now
-  if lastSeen and now - lastSeen < ns.REMEMBER_FOR then return end
+  -- The hook runs every frame, so a circle looks its node up in the shared memory once and then keeps it
+  -- fresh through this table.
+  local node = byType[pin.coords]
+  local now = GetTime()
+  if node and now - node.stamp < ns.REMEMBER_FOR then
+    node.stamp = now
+    return
+  end
+
+  local isNew
+  isNew, node = SightPin(pin)
+  byType[pin.coords] = node
 
   -- The flash takes the circle's own colour, so the colour alone tells the node type.
-  ns.Alert(TypeColor(pin.nodeType))
+  if isNew then ns.Alert(TypeColor(pin.nodeType)) end
 end
 
 -- GatherMate2 is read through its internals, not an API, so a build that moved them turns this source
