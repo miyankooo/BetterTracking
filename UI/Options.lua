@@ -134,7 +134,7 @@ local function BuildBlipSection()
     Settings.CreateCheckbox(category, SavedSetting("requireMovement", "Only while moving"),
       "A blip can only cross the minimap edge while you move, so standing still skips the scan entirely."),
     Settings.CreateCheckbox(category, SavedSetting("objectsOnly", "Gathering nodes only"),
-      "Ping only for blips whose tooltip is a world object. Turn off to ping for every blip, including townsfolk and other players."),
+      "Skips blips whose tooltip the game marks as a unit, such as townsfolk and other players. Turn off to ping for every blip."),
     Settings.CreateCheckbox(category, SavedSetting("vignettes", "Also alert on vignettes"),
       "Alert on rares and treasures that report themselves through the vignette system."),
     AddSlider(SavedSetting("discInterval", "Full sweep"), 1, 20, FormatSeconds,

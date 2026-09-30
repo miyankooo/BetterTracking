@@ -8,15 +8,16 @@ local primeNext = true
 
 ns.observedTypes = {}
 
--- Gathering nodes are GameObjects. Units are party members, NPCs and the townsfolk blips, which are
--- noise here. Untyped data is kept because blip tooltips may carry no type at all, and refusing them
--- would leave the addon silent for the very thing it exists to catch.
+-- Gathering nodes are GameObjects, but the minimap tooltip most likely reports its own MinimapMouseover type
+-- for every blip, so both count. Units are party members, NPCs and the townsfolk blips, which are noise
+-- here. Untyped data is kept because blip tooltips may carry no type at all, and refusing them would leave
+-- the addon silent for the very thing it exists to catch.
 local function IsWanted(data)
   local dataType = data.type
   ns.observedTypes[dataType == nil and "untyped" or dataType] = true
 
   if not ns.db.objectsOnly or dataType == nil then return true end
-  return dataType == Enum.TooltipDataType.Object
+  return dataType == Enum.TooltipDataType.Object or dataType == Enum.TooltipDataType.MinimapMouseover
 end
 
 -- Bucketed keys were the first attempt and broke on exactly this: a node straddling a bucket edge
@@ -47,11 +48,12 @@ local function Consider(data, dx, dy, silent)
   local now = GetTime()
 
   -- A guid is an exact identity and needs none of the position maths, so prefer it when the blip
-  -- tooltip happens to carry one.
-  if data.guid then
-    if keyed[data.guid] then return end
+  -- tooltip happens to carry one. A secret guid cannot be a key, so it falls back to the position.
+  local guid = data.guid
+  if guid and not ns.IsSecret(guid) then
+    if keyed[guid] then return end
 
-    keyed[data.guid] = now
+    keyed[guid] = now
   else
     local x, y = ns.WorldFromOffset(dx, dy)
 
@@ -104,6 +106,13 @@ local function Refill()
   queueIndex = 1
 end
 
+-- Speed is secret where unit stats are restricted, and a secret cannot be compared, so an unknown speed
+-- counts as standing still.
+local function IsMoving()
+  local speed = GetUnitSpeed("player")
+  return not ns.IsSecret(speed) and speed ~= 0
+end
+
 local function TryCalibrate()
   local now = GetTime()
   if now - lastCalibrate < 1 then return end
@@ -126,7 +135,7 @@ local function OnUpdate()
   end
 
   if not ns.db.space or not ns.CanAlert() then return end
-  if ns.db.requireMovement and GetUnitSpeed("player") == 0 then return end
+  if ns.db.requireMovement and not IsMoving() then return end
 
   if not queue or queueIndex > #queue then Refill() end
   if not queue or #queue == 0 then return end
@@ -141,51 +150,45 @@ local function OnUpdate()
   end
 end
 
-local function OnEvent(_, event, vignetteGUID, onMinimap)
-  -- Vignettes are a separate channel that reports minimap arrival directly. Vanilla content probably
-  -- never uses them, but the event costs nothing when it never fires and covers rares and treasures
-  -- if Forever does.
-  if event == "VIGNETTE_MINIMAP_UPDATED" then
-    if not ns.db.blips or not ns.db.vignettes or not ns.CanAlert() then return end
+-- Vignettes are a separate channel that reports minimap arrival directly. Vanilla content probably never
+-- uses them, but the event costs nothing when it never fires and covers rares and treasures if Forever does.
+-- Leaving stamps the vignette too, so the remember window runs from when it was last on the minimap and
+-- Prune ages it out like any other node.
+local function OnVignette(vignetteGUID, onMinimap)
+  if not ns.db.blips or not ns.db.vignettes or not ns.CanAlert() then return end
 
-    if onMinimap then
-      if not keyed[vignetteGUID] then
-        keyed[vignetteGUID] = GetTime()
-        ns.Alert()
-      end
-    else
-      keyed[vignetteGUID] = nil
-    end
-    return
-  end
+  local isNew = onMinimap and not keyed[vignetteGUID]
+  keyed[vignetteGUID] = GetTime()
+  if isNew then ns.Alert() end
+end
 
-  if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
-    wipe(remembered)
-    wipe(keyed)
-  end
-
-  ns.RebuildGeometry()
+-- A new view shows nodes that were already there, so the next sweep records them silently.
+local function Reprime()
   primeNext = true
   queue = nil
 end
 
--- Without the engine hit test there is nothing to scan, so the driver never starts.
-if ns.canProbe then
-  local driver = CreateFrame("Frame")
-  driver:SetScript("OnUpdate", OnUpdate)
-  driver:SetScript("OnEvent", OnEvent)
-  driver:RegisterEvent("PLAYER_ENTERING_WORLD")
-  driver:RegisterEvent("ZONE_CHANGED_NEW_AREA")
-  driver:RegisterEvent("MINIMAP_UPDATE_ZOOM")
-  driver:RegisterEvent("MINIMAP_UPDATE_TRACKING")
-  driver:RegisterEvent("VIGNETTE_MINIMAP_UPDATED")
+local function OnEvent(_, event, ...)
+  if event == "VIGNETTE_MINIMAP_UPDATED" then
+    OnVignette(...)
+    return
+  end
+
+  ns.RebuildGeometry()
+  Reprime()
 end
+
+local driver = CreateFrame("Frame")
+driver:SetScript("OnUpdate", OnUpdate)
+driver:SetScript("OnEvent", OnEvent)
+driver:RegisterEvent("MINIMAP_UPDATE_ZOOM")
+driver:RegisterEvent("MINIMAP_UPDATE_TRACKING")
+driver:RegisterEvent("VIGNETTE_MINIMAP_UPDATED")
 
 function ns.ResetSeen()
   wipe(remembered)
   wipe(keyed)
-  primeNext = true
-  queue = nil
+  Reprime()
 end
 
 function ns.SeenCount()
@@ -193,3 +196,8 @@ function ns.SeenCount()
   for _ in pairs(keyed) do count = count + 1 end
   return count
 end
+
+ns.OnZoning(function()
+  ns.ResetSeen()
+  ns.RebuildGeometry()
+end)

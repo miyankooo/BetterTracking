@@ -2,7 +2,7 @@
 
 Plays a ping the moment a gathering node comes into range on your minimap, so you can gather without watching it.
 
-For WoW Forever only. On Classic Era, use [GatherMate2Alert](https://github.com/miyankooo/GatherMate2Alert) instead.
+For WoW Forever 1.60.x only.
 
 It listens to two sources, and you switch each one on or off by itself:
 
@@ -17,11 +17,11 @@ It listens to two sources, and you switch each one on or off by itself:
 
 **One alert for a cluster.** A cooldown folds a group of nodes into a single ping.
 
-**Sound, flash or both.** Pick one of six sounds, or turn the sound off and flash the minimap edge instead. The flash is gold for a minimap node and takes the colour of the GatherMate2 circle that caused it. The sound can come through while sound effects are muted.
+**Sound, flash or both.** Pick one of six sounds, or turn the sound off and flash the minimap edge instead. The flash is gold for a minimap node and takes the colour of the GatherMate2 circle that caused it. By default the sound plays on the Master channel, so it is meant to come through while sound effects are muted. That is not yet confirmed in game.
 
 **Quiet when it should be.** No alerts on flight paths, in combat, or for the first seconds after zoning.
 
-**Gathering nodes only, by default.** Party members, NPCs and townsfolk blips are filtered out.
+**Gathering nodes only, by default.** Blips whose tooltip the game marks as a unit, such as party members and townsfolk, are skipped. Whether the game marks them that way on the minimap is not yet confirmed in game.
 
 **Self-calibrating.** The first time you idly hover a blip near the minimap edge, the addon works out how to read the minimap and switches the minimap source on.
 
@@ -31,7 +31,7 @@ It listens to two sources, and you switch each one on or off by itself:
 
 ## Installation
 
-1. Copy the `TrackingAlert/` folder into `World of Warcraft/_classic_beta_/Interface/AddOns/`.
+1. Copy the `TrackingAlert/` folder into the `Interface/AddOns/` folder of your WoW Forever install.
 2. Restart the game or `/reload`.
 3. Enable **Tracking Alert** in the AddOns list. Enable it for all characters if you want its entry in the addon menu under the minimap.
 
@@ -53,7 +53,7 @@ The page uses the game's own settings list. Indented rows belong to the switch a
 | --- | --- | --- |
 | Play a sound | on | Sound on each alert |
 | Sound | Minimap Ping | One of six game sounds. Picking one plays it |
-| Play while sound effects are muted | on | Plays on the Master channel |
+| Play while sound effects are muted | on | Plays on the Master channel instead of sound effects |
 | Flash the minimap edge | on | Ring flash on each alert |
 | Flash thickness | 4 | Ring from hairline (1) to bold (10) |
 | Cooldown | 3 s | Shortest gap between two alerts |
@@ -65,7 +65,7 @@ The page uses the game's own settings list. Indented rows belong to the switch a
 | --- | --- | --- |
 | Alert on minimap nodes | on | Minimap source switch |
 | Only while moving | on | Skip scanning while standing still |
-| Gathering nodes only | on | Ignore blips that are units, not world objects |
+| Gathering nodes only | on | Skip blips whose tooltip the game marks as a unit |
 | Also alert on vignettes | on | Rares and treasures that report themselves to the minimap |
 | Full sweep | 5 s | How often the whole minimap is swept, for nodes that spawn inside the radius |
 | Probes per frame | 8 | Work per frame. Lower is cheaper and slower to react |
@@ -109,6 +109,8 @@ GatherMate2 is optional. Nothing needs it, and its source switches on by itself 
 **The minimap source needs calibrating once.** The game does not document how to address a point on the minimap, so the addon works it out by testing a blip you hover. Hover a blip near the edge, not near the centre.
 
 **The minimap source yields to your cursor.** Reading the minimap moves the game's own minimap mouseover, so it pauses while your cursor is over the minimap.
+
+**The minimap source may pause in restricted content.** Where the game hides your speed or a blip's name, the addon cannot read them, so it skips the scan (with **Only while moving** on) or that blip.
 
 **Two minimap nodes of the same kind close together count as one.**
 

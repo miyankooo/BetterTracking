@@ -48,24 +48,19 @@ function ns.Print(message)
   print("|cff7FD4FF" .. ns.title .. "|r " .. message)
 end
 
--- 1.0.0 saved another shape: `enabled` switched the blip scan, and `sound` was false for the default ping or
--- a sound kit id, never "off", so read as-is an upgrade goes silent. Only 1.0.0 wrote `enabled`, so it marks
--- such a save and dropping it makes this run once. Cooldown snaps onto the new whole-second slider.
-local function MigrateLegacy(saved)
-  if saved.enabled == nil then return end
+-- Restricted content can hand values out as secrets, which break comparisons and table keys. issecretvalue
+-- is declared SecretArguments "AllowedWhenUntainted", so it may raise for addon code handed a secret, and a
+-- raise can only mean secret. It does not take nil, which is never secret.
+function ns.IsSecret(value)
+  if value == nil then return false end
 
-  saved.blips = saved.enabled
-  if type(saved.sound) == "number" then saved.soundId = saved.sound end
-  saved.sound = true
-  if saved.cooldown then saved.cooldown = math.max(1, math.floor(saved.cooldown + 0.5)) end
-
-  saved.enabled, saved.allowUntyped, saved.ringPoints, saved.discSpacing = nil, nil, nil, nil
+  local ok, secret = pcall(issecretvalue, value)
+  return not ok or secret
 end
 
 -- Table defaults are copied, so a saved table never aliases the defaults it was filled from.
 local function LoadSettings()
   TrackingAlertDB = TrackingAlertDB or {}
-  MigrateLegacy(TrackingAlertDB)
   for key, value in pairs(ns.defaults) do
     if TrackingAlertDB[key] == nil then
       TrackingAlertDB[key] = type(value) == "table" and CopyTable(value) or value

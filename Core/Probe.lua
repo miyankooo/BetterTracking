@@ -1,11 +1,5 @@
 local _, ns = ...
 
--- 1.60.1 has the hit test, the minimap tooltip and the view radius. Checking them once costs nothing and
--- turns a client that drops one into an idle blip source instead of an error on every frame.
-ns.canProbe = Minimap.UpdateMouseoverAtPoint ~= nil
-  and C_TooltipInfo ~= nil and C_TooltipInfo.GetMinimapMouseover ~= nil
-  and C_Minimap ~= nil and C_Minimap.GetViewRadius ~= nil
-
 -- Minimap blips are drawn by the engine and are not Lua objects, so the only documented way to read one
 -- is to run the engine's own hit test at a point and then ask for the tooltip it produced.
 -- UpdateMouseoverAtPoint is documented as two bare numbers with no stated coordinate space, so which of
@@ -49,8 +43,10 @@ function ns.Probe(dx, dy)
   return ns.ProbeAt(dx, dy, ns.db.space)
 end
 
+-- A secret name can be neither compared nor used as a key, so it reads as no blip at all.
 function ns.BlipName(data)
-  return data and data.lines and data.lines[1] and data.lines[1].leftText
+  local name = data and data.lines and data.lines[1] and data.lines[1].leftText
+  if name and not ns.IsSecret(name) then return name end
 end
 
 function ns.CursorOffset()
@@ -75,7 +71,6 @@ end
 -- same tooltip from the cursor's own offset and misses at the mirrored offset, which is what rules out
 -- a space that merely happened to land on something else.
 function ns.CalibrateFromCursor(quiet)
-  if not ns.canProbe then return false, "this client has no minimap hit test" end
   if not Minimap:IsMouseOver() then return false, "hover a tracked blip on the minimap first" end
 
   local wanted = ns.BlipName(C_TooltipInfo.GetMinimapMouseover())

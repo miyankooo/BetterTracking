@@ -94,10 +94,19 @@ end
 
 ns.OnSettingsLoaded(ns.ApplyThickness)
 
+local zoningCallbacks = {}
+
+-- Both sources forget their nodes on zoning, so one handler owns the event and tells them in the order the
+-- files registered.
+function ns.OnZoning(callback)
+  zoningCallbacks[#zoningCallbacks + 1] = callback
+end
+
 -- Zoning repopulates every node at once, so stay quiet for a moment instead of pinging for all of them.
 local zoning = CreateFrame("Frame")
 zoning:RegisterEvent("PLAYER_ENTERING_WORLD")
 zoning:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 zoning:SetScript("OnEvent", function()
   quietUntil = GetTime() + ZONING_QUIET
+  for _, callback in ipairs(zoningCallbacks) do callback() end
 end)

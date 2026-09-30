@@ -146,7 +146,4 @@ ns.OnSettingsLoaded(function()
   EventUtil.ContinueOnAddOnLoaded("GatherMate2", Attach)
 end)
 
-local zoning = CreateFrame("Frame")
-zoning:RegisterEvent("PLAYER_ENTERING_WORLD")
-zoning:RegisterEvent("ZONE_CHANGED_NEW_AREA")
-zoning:SetScript("OnEvent", function() wipe(seen) end)
+ns.OnZoning(function() wipe(seen) end)
