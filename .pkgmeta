@@ -2,4 +2,3 @@ package-as: TrackingAlert
 
 ignore:
   - Tools
-  - MEMORY.md
