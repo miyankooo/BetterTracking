@@ -1,5 +1,10 @@
-package-as: TrackingAlert
+package-as: BetterTracking
+manual-changelog: CHANGELOG.md
 
 ignore:
-  - Tools
   - CLAUDE.md
+  - Tests
+  - Tools
+
+optional-dependencies:
+  - gathermate2

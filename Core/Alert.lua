@@ -1,7 +1,5 @@
 local addonName, ns = ...
 
-ns.GOLD = { 1, 0.82, 0 }
-
 local ZONING_QUIET = 5
 local FLASH_TEXTURE = "Interface\\AddOns\\" .. addonName .. "\\Media\\pulse_ring"
 
@@ -25,6 +23,10 @@ local ring = flash:CreateTexture(nil, "OVERLAY")
 ring:SetAllPoints(flash)
 ring:SetTexture(FLASH_TEXTURE)
 
+-- The texture is a 4x4 atlas of ten rings from hairline to bold, because the client cannot draw a ring at
+-- runtime. The fourth cell is a medium ring.
+ring:SetTexCoord(0.75, 1, 0, 0.25)
+
 local fade = flash:CreateAnimationGroup()
 local fadeIn = fade:CreateAnimation("Alpha")
 fadeIn:SetFromAlpha(0)
@@ -38,42 +40,38 @@ fadeOut:SetDuration(0.8)
 fadeOut:SetOrder(2)
 fade:SetScript("OnFinished", function() flash:Hide() end)
 
--- The texture is a 4x4 atlas of ten rings from hairline to bold, because the client cannot draw a ring
--- at runtime. The thickness setting picks a cell.
-function ns.ApplyThickness()
-  local index = ns.db.flashThickness - 1
-  local column, row = index % 4, math.floor(index / 4)
-  ring:SetTexCoord(column * 0.25, (column + 1) * 0.25, row * 0.25, (row + 1) * 0.25)
-end
-
 function ns.Flash(r, g, b)
-  if not r then r, g, b = unpack(ns.GOLD) end
+  if not r then r, g, b = NORMAL_FONT_COLOR:GetRGB() end
   ring:SetVertexColor(r, g, b)
   flash:Show()
   fade:Restart()
 end
 
+-- Master is meant to come through with sound effects muted, which is when a gatherer needs the ping most.
+-- UNVERIFIED in game.
 function ns.PlayAlertSound()
-  PlaySound(ns.db.soundId, ns.db.channel, true)
+  PlaySound(ns.db.soundId, "Master", true)
 end
 
 function ns.AlertsOn()
   return ns.db.sound or ns.db.flash
 end
 
--- Sources check this before they record a node, so a node reached while muted, on a flight path or in a
--- fight still alerts once an alert is possible again.
+-- Sources check this before they record a node, so a node reached while paused, muted, dead, on a flight
+-- path or in a fight still alerts once an alert is possible again.
 function ns.CanAlert()
-  return ns.AlertsOn() and not UnitOnTaxi("player") and not InCombatLockdown()
+  return not ns.db.paused and ns.AlertsOn() and not UnitOnTaxi("player") and not InCombatLockdown()
+    and not UnitIsDeadOrGhost("player")
 end
 
 -- Sources record a node before calling this, so a node swallowed by the cooldown or the zoning window
--- stays remembered and never alerts late.
-function ns.Alert(r, g, b)
+-- stays remembered and never alerts late. The name is kept so the player can see what pinged.
+function ns.Alert(name, r, g, b)
   local now = GetTime()
   if now < quietUntil or now - lastAlert < ns.db.cooldown then return end
 
   lastAlert = now
+  ns.lastAlertName = name
   if ns.db.sound then ns.PlayAlertSound() end
   if ns.db.flash then ns.Flash(r, g, b) end
 end
@@ -83,14 +81,11 @@ function ns.PreviewAlert()
   ns.Flash()
 end
 
--- The right-click toggle turns both outputs on or off together, so one click always means one state.
-function ns.ToggleAlerts()
-  local turnOn = not ns.AlertsOn()
-  ns.db.sound, ns.db.flash = turnOn, turnOn
-  PlaySound(turnOn and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+-- Pausing is its own flag, so resuming brings back exactly the sound and flash choices the player made.
+function ns.TogglePause()
+  ns.db.paused = not ns.db.paused
+  ns.Print(ns.db.paused and "Alerts paused." or "Alerts resumed.")
 end
-
-ns.OnSettingsLoaded(ns.ApplyThickness)
 
 local zoningCallbacks = {}
 

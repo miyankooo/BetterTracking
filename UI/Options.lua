@@ -3,7 +3,6 @@ local _, ns = ...
 local NEEDS_GATHERMATE = "Needs GatherMate2 installed and enabled."
 
 local category, layout, categoryID
-local settings = {}
 local nodeTypes = {}
 
 local function IsOn(key)
@@ -15,13 +14,11 @@ local function IsGatherMateReady()
 end
 
 -- Every control is a proxy over ns.db, so each saved key stays exactly what it was. Blizzard calls a proxy's
--- setter only when the value really changes, so a Defaults click that changes nothing fires no preview and
--- no GatherMate2 refresh. Settings.VarType names are Lua type names, so the default names the type.
+-- setter only when the value really changes, so a Defaults click that changes nothing plays no sound
+-- preview. Settings.VarType names are Lua type names, so the default names the type.
 local function RegisterSetting(key, name, default, get, set)
-  local variable = "TRACKING_ALERT_" .. strupper(key)
-  local setting = Settings.RegisterProxySetting(category, variable, type(default), name, default, get, set)
-  settings[key] = setting
-  return setting
+  local variable = "BETTER_TRACKING_" .. strupper(key)
+  return Settings.RegisterProxySetting(category, variable, type(default), name, default, get, set)
 end
 
 local function SavedSetting(key, name, onChange)
@@ -31,13 +28,6 @@ local function SavedSetting(key, name, onChange)
       ns.db[key] = value
       if onChange then onChange() end
     end)
-end
-
--- The saved value is a channel name, but the question a player answers is yes or no.
-local function ChannelSetting()
-  return RegisterSetting("channel", "Play while sound effects are muted", ns.defaults.channel == "Master",
-    function() return ns.db.channel == "Master" end,
-    function(value) ns.db.channel = value and "Master" or "SFX" end)
 end
 
 local function AddSlider(setting, minimum, maximum, format, tooltip)
@@ -65,27 +55,17 @@ local function SoundOptions()
   return container:GetData()
 end
 
-local function PreviewThickness()
-  ns.ApplyThickness()
-  ns.Flash()
-end
-
 local function BuildAlertSection()
   AddHeader("Alert", "Shared by both sources.")
 
-  local sound = Settings.CreateCheckbox(category, SavedSetting("sound", "Play a sound"), "Plays a sound on each alert.")
+  local sound = Settings.CreateCheckbox(category, SavedSetting("sound", "Play a Sound"),
+    "Plays a sound on each alert, on the Master channel, so it comes through with sound effects turned off.")
   local soundPicker = Settings.CreateDropdown(category, SavedSetting("soundId", "Sound", ns.PlayAlertSound),
     SoundOptions, "One of six game sounds. Picking one plays it.")
   soundPicker:SetParentInitializer(sound, IsOn("sound"))
-  local channel = Settings.CreateCheckbox(category, ChannelSetting(),
-    "Plays on the Master channel, so the alert comes through with sound effects turned off.")
-  channel:SetParentInitializer(sound, IsOn("sound"))
 
-  local flash = Settings.CreateCheckbox(category, SavedSetting("flash", "Flash the minimap edge"),
+  Settings.CreateCheckbox(category, SavedSetting("flash", "Flash the Minimap Edge"),
     "Flashes a ring around the minimap: gold for a minimap node, the circle's own colour for GatherMate2. Leave the sound off for a silent alert.")
-  local thickness = AddSlider(SavedSetting("flashThickness", "Flash thickness", PreviewThickness), 1, 10, nil,
-    "From a hairline at 1 to bold at 10.")
-  thickness:SetParentInitializer(flash, IsOn("flash"))
 
   AddSlider(SavedSetting("cooldown", "Cooldown"), 1, 30, FormatSeconds,
     "Shortest gap between two alerts. A node noticed during the cooldown stays silent, so a cluster is one alert.")
@@ -99,16 +79,20 @@ end
 -- A settings row has no status line, so the live calibration state leads the tooltip, which is built on
 -- every hover.
 local function CalibrationTooltip()
-  local label = ns.SpaceLabel()
-  local status = label and ("Calibrated to " .. label .. ".") or "Not calibrated yet."
+  local status = ns.db.space and "Minimap alerts are ready." or "Not calibrated yet."
   return status .. "\n\nHover a tracked blip near the minimap edge for a second and the addon works out how to"
     .. " read the minimap. The button forgets the result, so the next hover detects it again."
 end
 
 -- The cursor is on this panel, not on a blip, so the button can only clear the old result and leave the
--- detection to the next hover. The row reads its text once when shown, so the click updates it.
+-- detection to the next hover. With nothing to clear it says how to start. The row reads its text once
+-- when shown, so the click updates it.
 local function OnCalibrate(button)
-  ns.Recalibrate()
+  if ns.db.space then
+    ns.Recalibrate()
+  else
+    ns.Print(ns.HOVER_HINT)
+  end
   button:SetText(CalibrateText())
 end
 
@@ -120,33 +104,45 @@ end
 local function ForgetNodes()
   ns.ResetSeen()
   ns.ResetGatherMateSeen()
-  ns.Print("forgot every remembered node.")
+  ns.Print("Forgot every remembered node.")
 end
 
 local function BuildBlipSection()
-  AddHeader("Minimap nodes", "Pings when a tracked blip, such as Find Herbs or Find Minerals, first appears on the minimap.")
+  AddHeader("Minimap Nodes", "Pings when a tracked blip, such as Find Herbs or Find Minerals, first appears on the minimap.")
 
-  local blips = Settings.CreateCheckbox(category, SavedSetting("blips", "Alert on minimap nodes"),
-    "Scans the minimap for tracked blips and pings when a new one appears.")
+  local blips = Settings.CreateCheckbox(category, SavedSetting("blips", "Alert on Minimap Nodes"),
+    "Scans the minimap for tracked blips while you move and pings when a new one appears.")
 
-  -- The sweep interval and probe budget trade latency against work per frame, so a low-end machine can
-  -- halve the budget and still catch every node.
   local children = {
-    Settings.CreateCheckbox(category, SavedSetting("requireMovement", "Only while moving"),
-      "A blip can only cross the minimap edge while you move, so standing still skips the scan entirely."),
-    Settings.CreateCheckbox(category, SavedSetting("objectsOnly", "Gathering nodes only"),
-      "Skips blips whose tooltip the game marks as a unit, such as townsfolk and other players. Turn off to ping for every blip."),
-    Settings.CreateCheckbox(category, SavedSetting("vignettes", "Also alert on vignettes"),
-      "Alert on rares and treasures that report themselves through the vignette system."),
-    AddSlider(SavedSetting("discInterval", "Full sweep"), 1, 20, FormatSeconds,
-      "How often the whole minimap is swept. Catches nodes that spawn inside the radius rather than crossing the edge."),
-    AddSlider(SavedSetting("probeBudget", "Probes per frame"), 2, 24, nil,
-      "How many points are tested each frame. Lower is cheaper and slower to react."),
+    Settings.CreateCheckbox(category, SavedSetting("objectsOnly", "Gathering Nodes Only"),
+      "Skips blips that the game marks as a unit, such as townsfolk and other players. Turn off to ping for every blip."),
+    Settings.CreateCheckbox(category, SavedSetting("vignettes", "Rares and Treasures"),
+      "Pings when a rare or treasure shows on the minimap."),
   }
   for _, child in ipairs(children) do child:SetParentInitializer(blips, IsOn("blips")) end
 
   AddButton("Calibration", CalibrateText, OnCalibrate, CalibrationTooltip)
-  AddButton("Remembered nodes", "Reset", ForgetNodes, NodesTooltip)
+  AddButton("Remembered Nodes", RESET, ForgetNodes, NodesTooltip)
+end
+
+local function IntervalOptions()
+  local container = Settings.CreateControlTextContainer()
+  container:Add(2, "2 Seconds")
+  container:Add(4, "4 Seconds")
+  return container:GetData()
+end
+
+local function BuildSwapSection()
+  AddHeader("Herb and Ore Swap", "Alternates Find Herbs and Find Minerals while you move, so both node types show on the minimap.")
+
+  local swap = Settings.CreateCheckbox(category, SavedSetting("swap", "Swap Herbs and Minerals", ns.ApplySwap),
+    "Casts Find Herbs and Find Minerals in turn while you move, so the minimap shows both and each new node"
+    .. " pings. Each swap costs a global cooldown. It waits in combat, while dead, on a flight, in an instance,"
+    .. " in a town or inn, while standing still, casting or looting, while an enemy is targeted or under the"
+    .. " cursor and while another tracking is on. Middle-click the minimap button to turn it on or off.")
+  local interval = Settings.CreateDropdown(category, SavedSetting("swapInterval", "Swap Every"), IntervalOptions,
+    "How long each tracking stays on before the swap.")
+  interval:SetParentInitializer(swap, IsOn("swap"))
 end
 
 -- Blizzard's settings dropdown stores a multi-select as a bitmask with one bit per option, so the saved set
@@ -189,8 +185,8 @@ local function AddTypePicker(parent)
   if #nodeTypes == 0 then return end
 
   local allTypes = TypeBit(#nodeTypes + 1) - 1
-  local setting = RegisterSetting("mutedTypes", "Node types", allTypes, TypeMask, SetTypeMask)
-  local picker = Settings.CreateDropdown(category, setting, TypeOptions, "Which GatherMate2 node types alert. All do by default.")
+  local setting = RegisterSetting("mutedTypes", "Node Types", allTypes, TypeMask, SetTypeMask)
+  local picker = Settings.CreateDropdown(category, setting, TypeOptions, "Which GatherMate2 node types ping. All do by default.")
   picker.getSelectionTextFunc = TypeSelectionText
   picker:SetParentInitializer(parent, IsOn("gatherMate"))
 end
@@ -203,29 +199,23 @@ end
 -- GatherMate2 attaches on its own ADDON_LOADED, before login, so readiness is settled by the time this
 -- runs. Its rows stay visible but greyed without it, so the source can be found.
 local function BuildGatherMateSection()
-  local summary = "Pings when GatherMate2 turns a nearby node into a tracking circle."
+  local summary = "Pings when you come near a spot GatherMate2 has recorded, even if the node is gone."
+    .. " Useful for a second profession you are not tracking."
   AddHeader("GatherMate2", ns.gatherMateReady and summary or NEEDS_GATHERMATE)
 
-  local circles = Settings.CreateCheckbox(category, SavedSetting("gatherMate", "Alert on GatherMate2 circles"),
-    GatherMateTooltip(summary))
-  AddTypePicker(circles)
-
-  local rows = {
-    circles,
-    Settings.CreateCheckbox(category, SavedSetting("hideIcons", "Hide node icons", ns.RefreshGatherMate),
-      GatherMateTooltip("Hides GatherMate2's far node icons. Tracking circles for nearby nodes stay, so the alert keeps working.")),
-    Settings.CreateCheckbox(category, SavedSetting("mergeCircles", "Merge stacked circles into one", ns.RefreshGatherMate),
-      GatherMateTooltip("Overlapping circles show as one. A cluster of mixed node types turns gold.")),
-    AddSlider(SavedSetting("circleSize", "Circle size", ns.RefreshGatherMate), 1, 10, nil,
-      GatherMateTooltip("GatherMate2's own circle size at 1, larger above.")),
-  }
-  for _, row in ipairs(rows) do row:AddModifyPredicate(IsGatherMateReady) end
+  local spots = Settings.CreateCheckbox(category,
+    SavedSetting("gatherMate", "Also Ping at Spots GatherMate2 Remembers"), GatherMateTooltip(summary))
+  spots:AddModifyPredicate(IsGatherMateReady)
+  AddTypePicker(spots)
 end
 
 -- The calibration is not a registered setting, so the panel's Defaults button leaves it alone. It is a
 -- fact about the client, not a preference.
 local function Register()
   category, layout = Settings.RegisterVerticalLayoutCategory(ns.title)
+
+  -- The swap leads, because tracking both node types is what most players open the page for.
+  BuildSwapSection()
   BuildAlertSection()
   BuildBlipSection()
   BuildGatherMateSection()
@@ -235,17 +225,26 @@ end
 
 EventUtil.ContinueOnPlayerLogin(Register)
 
-function ns.OpenOptions()
-  if categoryID then Settings.OpenToCategory(categoryID) end
-end
+local waitingForCombat = false
 
--- A change made outside the panel, such as the compartment toggle, reaches a control on screen only once
--- its setting is told to read the saved value again.
-function ns.RefreshOptions(...)
-  for index = 1, select("#", ...) do
-    local setting = settings[select(index, ...)]
-    if setting then setting:NotifyUpdate() end
+function ns.OpenOptions()
+  if not categoryID then return end
+
+  -- C_SettingsUtil.OpenSettingsPanel is documented HasRestrictions (SettingsUtilDocumentation.lua:17) without
+  -- saying which, most likely combat (UNVERIFIED), so a request made in combat waits for it to end.
+  if InCombatLockdown() then
+    ns.Print("Opens after combat.")
+    if not waitingForCombat then
+      waitingForCombat = true
+      EventUtil.RegisterOnceFrameEventAndCallback("PLAYER_REGEN_ENABLED", function()
+        waitingForCombat = false
+        ns.OpenOptions()
+      end)
+    end
+    return
   end
+
+  Settings.OpenToCategory(categoryID)
 end
 
 local function ReportTypes()
@@ -255,25 +254,31 @@ local function ReportTypes()
   end
 
   if #names == 0 then
-    ns.Print("no blip tooltips seen yet.")
+    ns.Print("No blip tooltips seen yet.")
   else
     table.sort(names)
-    ns.Print("tooltip types seen on blips: " .. table.concat(names, ", ") .. ".")
+    ns.Print("Tooltip types seen on blips: " .. table.concat(names, ", ") .. ".")
   end
 end
 
-SLASH_TRACKINGALERT1, SLASH_TRACKINGALERT2 = "/trackingalert", "/tra"
-function SlashCmdList.TRACKINGALERT(input)
+SLASH_BETTERTRACKING1, SLASH_BETTERTRACKING2 = "/bettertracking", "/tra"
+function SlashCmdList.BETTERTRACKING(input)
   local command = strlower(strtrim(input or ""))
 
   if command == "calibrate" then
-    local ok, detail = ns.CalibrateFromCursor()
-    if not ok then ns.Print("calibration failed: " .. detail) end
+    ns.CalibrateNow()
 
   elseif command == "status" then
-    ns.Print(("alerts %s, coordinate space %s, %d nodes remembered, GatherMate2 %s."):format(
-      ns.AlertsOn() and "on" or "off", ns.SpaceLabel() or "not calibrated", ns.SeenCount(),
+    ns.Print(("%s %s Minimap reading: %s. Nodes remembered: %d. Last alert: %s. GatherMate2 %s."):format(
+      ns.StatusText(), ns.SwapStatusText(), ns.SpaceLabel() or "not calibrated",
+      ns.SeenCount() + ns.GatherMateSeenCount(), ns.lastAlertName or NONE,
       ns.gatherMateReady and "attached" or "not attached"))
+
+  elseif command == "swap" then
+    ns.ToggleSwap()
+
+  elseif command == "minimap" then
+    ns.ToggleMinimap()
 
   elseif command == "types" then
     ReportTypes()
