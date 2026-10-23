@@ -8,7 +8,11 @@ ns.spaces = {
   { key = "center", label = "centre-relative pixels" },
   { key = "corner", label = "frame-local pixels" },
   { key = "normalized", label = "normalised -1 to 1" },
+  { key = "screen", label = "screen pixels" },
+  { key = "unit", label = "normalised 0 to 1" },
 }
+
+ns.NO_MATCH = "No known way to read this minimap matched the blip under your cursor. Hover another blip near the edge."
 
 local failedSpaces = {}
 
@@ -19,18 +23,32 @@ local function ToSpace(dx, dy, space)
     return halfWidth + dx, halfHeight + dy
   elseif space == "normalized" then
     return dx / halfWidth, dy / halfHeight
+  elseif space == "unit" then
+    return (dx / halfWidth + 1) / 2, (dy / halfHeight + 1) / 2
+  elseif space == "screen" then
+    local centerX, centerY = Minimap:GetCenter()
+    if not centerX then return nil end
+
+    local scale = Minimap:GetEffectiveScale()
+    return (centerX + dx) * scale, (centerY + dy) * scale
   end
   return dx, dy
 end
 
 -- A space whose arguments the engine rejects is dropped for the session, so a wrong guess costs one
--- error instead of one per probe.
+-- error instead of one per probe. Losing the calibrated space stops the minimap source, so that one says so.
 function ns.ProbeAt(dx, dy, space)
   if failedSpaces[space] then return nil end
 
   local x, y = ToSpace(dx, dy, space)
+  if not x then return nil end
+
   if not pcall(Minimap.UpdateMouseoverAtPoint, Minimap, x, y) then
     failedSpaces[space] = true
+    if space == ns.db.space then
+      ns.readFailed = true
+      ns.Print("The minimap stopped answering, so minimap alerts are off. Type /reload to start them again.")
+    end
     return nil
   end
 
@@ -70,20 +88,20 @@ end
 -- Ground truth is the real cursor sitting on a blip. The right space is the one that reproduces that
 -- same tooltip from the cursor's own offset and misses at the mirrored offset, which is what rules out
 -- a space that merely happened to land on something else.
-function ns.CalibrateFromCursor(quiet)
-  if not Minimap:IsMouseOver() then return false, "hover a tracked blip on the minimap first" end
+function ns.CalibrateFromCursor()
+  if not Minimap:IsMouseOver() then return false, "Hover a tracked blip on the minimap first." end
 
   local wanted = ns.BlipName(C_TooltipInfo.GetMinimapMouseover())
-  if not wanted then return false, "no blip under the cursor" end
+  if not wanted then return false, "No blip is under the cursor. Hover a tracked blip on the minimap." end
 
   local dx, dy = ns.CursorOffset()
-  if not dx then return false, "minimap has no centre yet" end
+  if not dx then return false, "The minimap is not placed yet. Try again in a moment." end
 
-  -- Near the centre all three candidates land in roughly the same place, so a sample there proves
-  -- nothing. Only an off-centre blip separates them.
+  -- Near the centre the frame-relative candidates land in roughly the same place, so a sample there
+  -- proves nothing. Only an off-centre blip separates them.
   local radius = Minimap:GetWidth() / 2
   if math.sqrt(dx * dx + dy * dy) < radius * 0.4 then
-    return false, "hover a blip nearer the minimap edge"
+    return false, "Hover a blip nearer the minimap edge."
   end
 
   for _, space in ipairs(ns.spaces) do
@@ -92,20 +110,20 @@ function ns.CalibrateFromCursor(quiet)
 
     if hit == wanted and mirrored ~= wanted then
       ns.db.space = space.key
+      ns.readFailed = false
       ns.RestoreCursorMouseover()
-      if not quiet then ns.Print("calibrated to " .. space.label .. ".") end
-      return true, space.label
+      return true
     end
   end
 
   ns.RestoreCursorMouseover()
-  return false, "no candidate coordinate space reproduced the hit"
+  return false, ns.NO_MATCH
 end
 
 -- The next idle hover over a blip calibrates again, so forgetting is all a recalibration needs.
 function ns.Recalibrate()
   ns.db.space = false
-  ns.Print("calibration cleared, hover a tracked blip near the minimap edge to calibrate.")
+  ns.Print("Calibration cleared. Hover a tracked blip near the minimap edge to calibrate again.")
 end
 
 function ns.SpaceLabel()

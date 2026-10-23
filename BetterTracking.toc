@@ -1,0 +1,31 @@
+## Interface: 16001
+## Title: Better Tracking
+## Notes: Swaps herb and ore tracking as you move and pings when a node, rare or GatherMate2 spot shows up.
+## Author: miyanko
+## Version: 1.0.0
+## Category: Map
+## IconTexture: Interface\Icons\Ability_Tracking
+## OptionalDeps: GatherMate2
+## SavedVariables: BetterTrackingDB
+
+# Load order is the dependency order: the libraries build the launcher, Config owns the saved settings, Alert
+# owns the one alert output and the zoning handler both sources share, Probe and Geometry read the minimap,
+# Memory is the node memory both sources share, Scanner is the minimap blip source, GatherMate is the optional
+# GatherMate2 source, Swap alternates herb and ore tracking, and the UI files build on all of them.
+
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+Libs\LibNativeUI-1.0\LibNativeUI-1.0.lua
+
+Core\Config.lua
+Core\Alert.lua
+Core\Probe.lua
+Core\Geometry.lua
+Core\Memory.lua
+Core\Scanner.lua
+Core\GatherMate.lua
+Core\Swap.lua
+UI\Options.lua
+UI\Launcher.lua
