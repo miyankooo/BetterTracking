@@ -1,8 +1,8 @@
 local _, ns = ...
 
--- Tuned on the 198 px Forever minimap: eight probes a frame walk the edge ring in eight frames, and a full
--- sweep every five seconds catches nodes that spawn inside the radius.
-local PROBE_BUDGET = 8
+-- Every sweep takes one second at any frame rate: the edge ring once a second, and a full sweep every five
+-- seconds catches nodes that spawn inside the radius.
+local SWEEP_SECONDS = 1
 local DISC_INTERVAL = 5
 
 -- The swapped-in blips may reach the minimap a few frames after MINIMAP_UPDATE_TRACKING (UNVERIFIED), so the
@@ -20,6 +20,7 @@ local keyed = {}
 local queue, queueIndex, queueSilent = nil, 1, false
 local lastDisc, lastCalibrate = 0, 0
 local primeNext, sweepNext, sweepAt = true, false, 0
+local credit, trackingOn = 0, false
 local warnedNoMatch = false
 
 ns.observedTypes = {}
@@ -107,7 +108,7 @@ local function Refill()
     queue, queueSilent = ns.RingPoints(), false
   end
 
-  queueIndex = 1
+  queueIndex, credit = 1, 0
 end
 
 -- Idle hovers fail quietly while the cursor is not on a usable blip. Only a blip that no known reading
@@ -131,7 +132,7 @@ function ns.CalibrateNow()
   ns.Print(ok and READY or detail)
 end
 
-local function OnUpdate()
+local function OnUpdate(_, elapsed)
   if not ns.db.blips then return end
 
   -- Probing rewrites the engine's minimap mouseover, so a cursor that is genuinely on the minimap wins.
@@ -141,19 +142,19 @@ local function OnUpdate()
     return
   end
 
-  -- A blip can only cross the minimap edge while the player moves, so standing still skips the scan.
-  if not ns.db.space or not ns.CanAlert() or not ns.IsMoving() then return end
+  -- Blips show only while a spell tracking is on, and can only cross the minimap edge while the player moves.
+  if not trackingOn or not ns.db.space or not ns.CanAlert() or not ns.IsMoving() then return end
 
   if not queue or queueIndex > #queue then Refill() end
   if not queue or #queue == 0 then return end
 
-  for _ = 1, PROBE_BUDGET do
+  -- A hitch counts as a tenth of a second at most, so one frozen frame never bursts into a whole sweep.
+  credit = credit + math.min(elapsed, 0.1) * #queue / SWEEP_SECONDS
+  while credit >= 1 and queueIndex <= #queue do
     local point = queue[queueIndex]
-    if not point then break end
-
     local data = ns.Probe(point[1], point[2])
     if data then Consider(data, point[1], point[2], queueSilent) end
-    queueIndex = queueIndex + 1
+    queueIndex, credit = queueIndex + 1, credit - 1
   end
 end
 
@@ -188,6 +189,12 @@ local function Sweep()
   queue = nil
 end
 
+-- Swap.lua loads later, so its reader is looked up at call time.
+local function ReadTrackingOn()
+  local _, active = ns.ReadTracking()
+  trackingOn = active ~= nil
+end
+
 local function OnEvent(_, event, ...)
   if event == "VIGNETTE_MINIMAP_UPDATED" then
     OnVignette(...)
@@ -195,11 +202,11 @@ local function OnEvent(_, event, ...)
   end
 
   ns.RebuildGeometry()
-  if event == "MINIMAP_UPDATE_TRACKING" and ns.db.swap then
-    Sweep()
-  else
-    Reprime()
+  if event == "MINIMAP_UPDATE_TRACKING" then
+    ReadTrackingOn()
+    if ns.db.swap then return Sweep() end
   end
+  Reprime()
 end
 
 local driver = CreateFrame("Frame")
@@ -224,6 +231,7 @@ end
 ns.OnZoning(function()
   ns.ResetSeen()
   ns.RebuildGeometry()
+  ReadTrackingOn()
 end)
 
 -- One line, once per account, because the minimap source cannot start until the player hovers a blip.

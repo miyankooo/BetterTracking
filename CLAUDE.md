@@ -14,7 +14,8 @@
 - `Minimap:UpdateMouseoverAtPoint` is `SecretArguments = "AllowedWhenUntainted"`. Pass it plain numbers only.
 - Hooks are `hooksecurefunc` only: GatherMate2's `Display:addMiniPin`, and Blizzard's movement and steering globals once the swap is in input mode. No protected frames. Guard every GatherMate2 internal the source reads.
 - Keep the GatherMate2 source, off by default because its circles mark remembered spots, and keep vignette alerts. Never restyle GatherMate2's own pins. Node types are limited to Forever's four. The toc `## Notes` keeps naming GatherMate2.
-- Tuning stays hardcoded: probe budget 8, full sweep 5 s, scan only while moving, sound on the Master channel, flash ring cell 4. No settings for them.
+- Tuning stays hardcoded: the edge ring once a second and a full sweep every 5 s, both paced by `elapsed` and never by frames, a frame counting as 0.1 s at most, scan only while moving with a spell tracking on, sound on the Master channel, flash ring cell 4. No settings for them.
+- The scanner keeps `trackingOn` from `ns.ReadTracking`, read on `MINIMAP_UPDATE_TRACKING` and through `ns.OnZoning` at login. Non-spell entries such as townsfolk filters never count.
 - Coordinate-space calibration and `/tra types` stay until the in-game test settles the space, then the measured space is hardcoded and both go.
 - Zoning has one handler, in `Core/Alert.lua`. Other modules react through `ns.OnZoning` callbacks.
 - Options use the native Settings vertical layout, no canvas. Every control is a `Settings.RegisterProxySetting` over `ns.db`. The state keys `space`, `paused`, `hinted` and `minimap` have no control, so Defaults keeps them.

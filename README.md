@@ -94,7 +94,7 @@ The minimap source needs one hover. The game does not document how to address a 
 
 The minimap source yields to your cursor. Reading the minimap moves the game's own minimap mouseover, so it pauses while your cursor is over the minimap.
 
-The minimap source scans only while you move. Where the game hides your speed or a blip's name, it skips the scan or that blip.
+The minimap source scans only while you move with a tracking spell on. It checks the minimap edge once a second and the whole minimap every five seconds, so a ping can come a moment after the blip shows. Where the game hides your speed or a blip's name, it skips the scan or that blip.
 
 Two minimap nodes of the same kind close together count as one.
 

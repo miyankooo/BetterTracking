@@ -523,9 +523,10 @@ function Fire(event, ...)
   end
 end
 
-local function Tick(count)
+local function Tick(count, step)
+  step = step or 1 / 60
   for _ = 1, count do
-    clock = clock + 1 / 60
+    clock = clock + step
 
     -- The engine refreshes minimap mouseover from the real cursor every frame, which is what gives
     -- calibration its ground truth and what overwrites whatever the addon last probed.
@@ -534,7 +535,7 @@ local function Tick(count)
     end
 
     for _, frame in ipairs(frames) do
-      if frame.scripts.OnUpdate then frame.scripts.OnUpdate(frame) end
+      if frame.scripts.OnUpdate then frame.scripts.OnUpdate(frame, step) end
     end
 
     for _, ticker in ipairs(tickers) do
@@ -607,6 +608,44 @@ local function Walk(toX, toY, steps)
     Tick(40)
   end
 end
+
+print("tracking gate")
+local realProbe = Minimap.UpdateMouseoverAtPoint
+local probes = 0
+Minimap.UpdateMouseoverAtPoint = function(...)
+  probes = probes + 1
+  return realProbe(...)
+end
+
+Fire("MINIMAP_UPDATE_TRACKING")
+Tick(300)
+Check("without a spell tracking the scan stays idle", probes == 0, probes .. " probes")
+
+tracking[3].active = true
+Fire("MINIMAP_UPDATE_TRACKING")
+Tick(60)
+Check("any spell tracking starts it", probes > 0, probes .. " probes")
+
+print("scan rate")
+
+-- Probes over ten seconds, past the priming sweep, so both rates hold the same mix of ring and disc.
+local function ProbesPerSecond(fps)
+  Tick(2 * fps, 1 / fps)
+  probes = 0
+  Tick(10 * fps, 1 / fps)
+  return probes / 10
+end
+
+local ringSize, discSize = #ns.RingPoints(), #ns.DiscPoints()
+local expected = (ringSize * 4 + discSize) / 5
+local slow, fast = ProbesPerSecond(30), ProbesPerSecond(144)
+Check("the scan costs the same at 30 and 144 fps", math.abs(slow - fast) <= expected * 0.15, slow .. " vs " .. fast)
+Check("the edge ring runs once a second with a full sweep every five", math.abs(fast - expected) <= expected * 0.15,
+  fast .. " probes a second, expected " .. expected)
+probes = 0
+Tick(1, 5)
+Check("a hitch never bursts into a whole sweep", probes <= discSize * 0.1 + 1, probes .. " probes")
+Minimap.UpdateMouseoverAtPoint = realProbe
 
 print("arrival")
 
