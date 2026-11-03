@@ -4,14 +4,10 @@ Features, commands and settings are in `README.md`.
 
 ## Target
 
-- WoW Forever 1.60.x only, `## Interface: 16001`. No client branches, no `WOW_PROJECT_*`, no Era templates, no API probes.
+- No Era templates and no API probes.
 - `main` is the only branch. The repo never held a Classic version, so it has no `1.15.x-backup`.
 - The Classic Era feature lives in the separate GatherMate2Alert repo. The README has no Classic Era pointer.
-- Verify every API against Gethe `wow-ui-source` and Ketho `BlizzardInterfaceResources`, branch `forever`. Check GatherMate2 internals on both its upstream branches, `master` and `classic`.
-
-## Setup
-
-- Link the repo folder into `World of Warcraft/_forever_/Interface/AddOns/` with `ln -s`. Edit and commit here, never in the install.
+- Check GatherMate2 internals on both its upstream branches, `master` and `classic`.
 
 ## Rules
 
@@ -26,17 +22,13 @@ Features, commands and settings are in `README.md`.
 - Zoning has one handler, in `Core/Alert.lua`. Other modules react through `ns.OnZoning` callbacks.
 - Options use the native Settings vertical layout, no canvas. Every control is a `Settings.RegisterProxySetting` over `ns.db`. The state keys `space`, `paused`, `hinted` and `minimap` have no control, so Defaults keeps them.
 - Known Blizzard bug on build 70532: picking a value in any addon's native settings dropdown taints Blizzard's own settings until /reload. Nameplates then raise secret-value errors. Checkboxes and sliders stay clean. The three dropdowns stay for their UX until Blizzard fixes it. Retest before the first CurseForge release. If it still fails, move them into an own panel like Social Shortcuts.
-- Setting names, headings and buttons use Title Case. Tooltips and chat use sentence case and end with a period.
-- The launcher is `UI.CreateLauncher` from LibNativeUI-1.0: a LibDBIcon minimap button, shown by default, plus the addon menu entry it registers. No `## AddonCompartmentFunc*` toc keys, or the addon shows twice. Its position lives in `BetterTrackingDB.minimap`. `/tra minimap` flips it through `setShown`.
+- The launcher is `UI.CreateLauncher` from LibNativeUI-1.0: a LibDBIcon minimap button, shown by default, plus the addon menu entry it registers. Its position lives in `BetterTrackingDB.minimap`. `/tra minimap` flips it through `setShown`.
 - Launcher clicks: left opens the settings, middle toggles the swap, right toggles `paused`, never the sound or flash settings. The icon is the active spell tracking's texture, set on `MINIMAP_UPDATE_TRACKING` and through `ns.OnZoning` at login, through the LibDataBroker object, else `Interface\Icons\Ability_Tracking`, which is also the toc `IconTexture`.
-- At most one chat line per action. The only login line is the first-run hint, once per account. The hint, the launcher status and the Calibrate button share one string, `ns.HOVER_HINT`, which names turning tracking on first.
+- The only login line is the first-run hint, once per account. The hint, the launcher status and the Calibrate button share one string, `ns.HOVER_HINT`, which names turning tracking on first.
 - The space label (`ns.SpaceLabel`) shows only in `/tra status`, never in chat lines or tooltips.
-- A settings open in combat prints "Opens after combat." and waits through `EventUtil.RegisterOnceFrameEventAndCallback` behind a `waitingForCombat` guard, the same shape as the sibling settings addons.
-- No tool window or dialog. No hardcoded fonts, custom panel textures or hand-built widgets. The only custom texture is the flash ring, `Media/pulse_ring.tga`.
-- Chat lines start with the shared yellow `[Better Tracking]:` prefix from `YELLOW_FONT_COLOR`. No literal `|cff` codes.
+- A settings open in combat waits through `EventUtil.RegisterOnceFrameEventAndCallback` behind a `waitingForCombat` guard, the same shape as the sibling settings addons.
+- No tool window or dialog. The only custom texture is the flash ring, `Media/pulse_ring.tga`.
 - Globals: `BetterTrackingDB`, `SLASH_BETTERTRACKING1` (`/bettertracking`), `SLASH_BETTERTRACKING2` (`/tra`) and `SlashCmdList.BETTERTRACKING`. Setting variables start with `BETTER_TRACKING_`.
-- The toc version stays 1.0.0 until the first CurseForge release.
-- Licence: MIT (LICENSE).
 
 ## Herb and ore swap
 
@@ -62,18 +54,15 @@ Features, commands and settings are in `README.md`.
 
 ## Checks
 
-- Run `luac -p` on every Lua file and `lua Tools/harness.lua` after every change. The harness runs on Lua 5.5 and proves logic and wiring, not client behaviour. It loads the real LibStub and LibNativeUI-1.0 and stubs CallbackHandler, LibDataBroker, LibDBIcon and AceAddon. A new client API needs a stub there.
+- Run `lua Tools/harness.lua` after every change. The harness runs on Lua 5.5 and proves logic and wiring, not client behaviour. It loads the real LibStub and LibNativeUI-1.0 and stubs CallbackHandler, LibDataBroker, LibDBIcon and AceAddon.
 - Give every fix a harness case. Confirm the case fails with the fix reverted.
-- Turn on `/console scriptErrors 1` and Find Herbs or Find Minerals before testing in game.
+- Turn on Find Herbs or Find Minerals before testing in game.
 
 ## Libraries
 
-- `Libs/` holds tracked, unedited upstream copies, byte-identical to ChatScan's. LibDBIcon-1.0, LibDataBroker-1.1 and CallbackHandler-1.0 stay for `UI.CreateLauncher` and load before LibNativeUI-1.0.
-- LibNativeUI-1.0's reference copy lives in ChatScan, so never edit it here. `shasum */Libs/LibNativeUI-1.0/LibNativeUI-1.0.lua` must print one hash.
+- `Libs/` is byte-identical to ChatScan's. LibDBIcon-1.0, LibDataBroker-1.1 and CallbackHandler-1.0 stay for `UI.CreateLauncher` and load before LibNativeUI-1.0.
 
 ## Release
 
-1. Retest the settings dropdown taint first, as the Rules say.
-2. Move the `## Unreleased` entries in `CHANGELOG.md` under the version, push `main` and tag `vX.Y.Z`.
-3. `.github/workflows/release.yml` packages it with the BigWigsMods packager. It stays byte-identical to ChatScan's copy.
-4. `.pkgmeta` keeps `CLAUDE.md`, `Tests` and `Tools` out of the package and lists GatherMate2 as an optional dependency.
+- Retest the settings dropdown taint first, as the Rules say.
+- `.pkgmeta` also keeps `CLAUDE.md` out of the package and lists GatherMate2 as an optional dependency.
