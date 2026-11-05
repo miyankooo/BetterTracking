@@ -1,42 +1,60 @@
 name: Release
 
 # Every push to main updates a release pull request from the Conventional Commits since the last
-# release, configured in release-please-config.json. Merging it tags vX.Y.Z, and this same job
-# packages the addon and uploads it to CurseForge and the GitHub release. A tag made with
-# GITHUB_TOKEN starts no other workflow, so packaging stays in this job. Without CF_API_TOKEN and
-# a toc X-Curse-Project-ID only the GitHub release gets the zip.
+# release, configured in release-please-config.json. Merging it tags vX.Y.Z and starts the package
+# job for that tag, which uploads the addon to CurseForge and the GitHub release. Packaging runs
+# through workflow_dispatch: a tag made with GITHUB_TOKEN starts no other workflow, and the packager
+# skips a branch push that lands on a tagged commit. Repackage a tag by hand with
+# `gh workflow run release.yml -f tag=vX.Y.Z`. Without CF_API_TOKEN and a toc X-Curse-Project-ID
+# only the GitHub release gets the zip.
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to package, such as v1.0.0
+        required: true
 
 permissions:
+  actions: write
   contents: write
   issues: write
   pull-requests: write
 
 jobs:
   release:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - id: release
         uses: googleapis/release-please-action@v4
 
-      # Full history, so the packager finds the tag.
       - if: ${{ steps.release.outputs.release_created }}
-        uses: actions/checkout@v7
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
+
+  package:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      # The tag with full history, so the packager finds it.
+      - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.tag }}
           fetch-depth: 0
 
       # The upload shows only this version's notes; CHANGELOG.md in the repo keeps the history.
-      - if: ${{ steps.release.outputs.release_created }}
-        env:
-          NOTES: ${{ steps.release.outputs.body }}
-        run: printf '%s\n' "$NOTES" > CHANGELOG.md
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > CHANGELOG.md
 
       # Zip and CurseForge file name: <Repo>-vX.Y.Z, such as ItemFlow-v1.0.0.zip.
-      - if: ${{ steps.release.outputs.release_created }}
-        uses: BigWigsMods/packager@v2
+      - uses: BigWigsMods/packager@v2
         with:
           args: -n "{package-name}-{project-version}:{package-name}-{project-version}"
         env:
