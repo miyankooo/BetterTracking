@@ -3,7 +3,7 @@ local _, ns = ...
 local UI = LibStub("LibNativeUI-1.0")
 
 -- Matches the toc IconTexture. Blizzard's own pet bar uses the same path (Shared/PetActionBar.lua).
-local ICON = "Interface\\Icons\\Ability_Tracking"
+local ICON = "Interface\\Icons\\inv_10_dungeonjewelry_explorer_trinket_1compass_color1"
 
 local launcher
 
