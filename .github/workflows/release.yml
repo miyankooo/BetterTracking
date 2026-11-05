@@ -34,8 +34,11 @@ jobs:
           NOTES: ${{ steps.release.outputs.body }}
         run: printf '%s\n' "$NOTES" > CHANGELOG.md
 
+      # Zip and CurseForge file name: <Repo>-vX.Y.Z, such as ItemFlow-v1.0.0.zip.
       - if: ${{ steps.release.outputs.release_created }}
         uses: BigWigsMods/packager@v2
+        with:
+          args: -n "{package-name}-{project-version}:{package-name}-{project-version}"
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           GH_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
