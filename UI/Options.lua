@@ -40,11 +40,6 @@ local function AddHeader(name, tooltip)
   layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(name, tooltip))
 end
 
-local function AddButton(name, text, onClick, tooltip)
-  local addSearchTags = true
-  layout:AddInitializer(CreateSettingsButtonInitializer(name, text, onClick, tooltip, addSearchTags))
-end
-
 local function FormatSeconds(value)
   return SECOND_ONELETTER_ABBR:format(value)
 end
@@ -69,36 +64,6 @@ local function BuildAlertSection()
 
   AddSlider(SavedSetting("cooldown", "Cooldown"), 1, 30, FormatSeconds,
     "Shortest gap between two alerts. A node noticed during the cooldown stays silent, so a cluster is one alert.")
-  AddButton("Preview", "Test", ns.PreviewAlert, "Plays the alert sound and flashes the minimap edge.")
-end
-
-local function CalibrateText()
-  return ns.db.space and "Recalibrate" or "Calibrate"
-end
-
--- A settings row has no status line, so the live calibration state leads the tooltip, which is built on
--- every hover.
-local function CalibrationTooltip()
-  local status = ns.db.space and "Minimap alerts are ready." or "Not calibrated yet."
-  return status .. "\n\nHover a tracked blip near the minimap edge for a second and the addon works out how to"
-    .. " read the minimap. The button forgets the result, so the next hover detects it again."
-end
-
--- The cursor is on this panel, not on a blip, so the button can only clear the old result and leave the
--- detection to the next hover. With nothing to clear it says how to start. The row reads its text once
--- when shown, so the click updates it.
-local function OnCalibrate(button)
-  if ns.db.space then
-    ns.Recalibrate()
-  else
-    ns.Print(ns.HOVER_HINT)
-  end
-  button:SetText(CalibrateText())
-end
-
-local function NodesTooltip()
-  return ("Forgets every node both sources remember, %d right now, so each alerts again the next time it"
-    .. " comes into range."):format(ns.SeenCount() + ns.GatherMateSeenCount())
 end
 
 local function ForgetNodes()
@@ -120,9 +85,6 @@ local function BuildBlipSection()
       "Pings when a rare or treasure shows on the minimap."),
   }
   for _, child in ipairs(children) do child:SetParentInitializer(blips, IsOn("blips")) end
-
-  AddButton("Calibration", CalibrateText, OnCalibrate, CalibrationTooltip)
-  AddButton("Remembered Nodes", RESET, ForgetNodes, NodesTooltip)
 end
 
 local function IntervalOptions()
@@ -211,6 +173,9 @@ end
 
 -- The calibration is not a registered setting, so the panel's Defaults button leaves it alone. It is a
 -- fact about the client, not a preference.
+-- No button rows: an addon's CreateSettingsButtonInitializer row taints the pooled button frame, and
+-- Blizzard's Social page then raises ADDON_ACTION_FORBIDDEN for IsUserOAuthed() naming this addon.
+-- Test, recalibrate and reset stay on /tra.
 local function Register()
   category, layout = Settings.RegisterVerticalLayoutCategory(ns.title)
 

@@ -503,12 +503,6 @@ local function Tooltip(name)
   return type(tooltip) == "function" and tooltip() or tooltip
 end
 
-local function Click(name)
-  local button = { SetText = function(self, text) self.text = text end }
-  Row(name).data.buttonClick(button, "LeftButton", false)
-  return button
-end
-
 local function RestoreDefaults()
   for _, setting in pairs(panel.settings) do setting:SetValueToDefault() end
 end
@@ -1003,31 +997,30 @@ alerts = {}
 RestoreDefaults()
 Check("Defaults that change nothing play nothing", #alerts == 0, #alerts .. " sounds")
 
-alerts = {}
-Click("Preview")
-Check("Test plays the alert sound", alerts[1] == ns.db.soundId, tostring(alerts[1]))
+-- A button row taints Blizzard's pooled button frame, which its Social page reuses for a protected call.
+local buttons = {}
+for _, row in ipairs(panel.rows) do
+  if row.kind == "button" then buttons[#buttons + 1] = row.data.name end
+end
+Check("the panel has no button rows", #buttons == 0, table.concat(buttons, ", "))
 
-Check("Calibration offers a recalibration once calibrated", Row("Calibration").data.buttonText() == "Recalibrate")
-Check("and leads its tooltip with the live state in plain words", Tooltip("Calibration"):find("^Minimap alerts are ready%.") ~= nil)
-local calibrate = Click("Calibration")
-Check("clicking it clears the space and relabels the button", ns.db.space == false and calibrate.text == "Calibrate")
-Check("and the tooltip follows", Tooltip("Calibration"):find("^Not calibrated") ~= nil)
-Click("Calibration")
-Check("with nothing to clear it says how to start", chat[#chat]:find(HINT, 1, true) ~= nil, chat[#chat])
+alerts = {}
+SlashCmdList.BETTERTRACKING("test")
+Check("/tra test plays the alert sound", alerts[1] == ns.db.soundId, tostring(alerts[1]))
+SlashCmdList.BETTERTRACKING("recalibrate")
+Check("/tra recalibrate clears the space", ns.db.space == false)
 ns.db.space = "center"
 
 ns.db.gatherMate = true
 ns.ResetSeen()
 Tick(600)
 local remembered = ns.SeenCount()
-Check("the reset tooltip counts the remembered nodes", Tooltip("Remembered Nodes"):find(remembered .. " right now", 1, true) ~= nil)
 clock = clock + 5
 hooks.addMiniPin(display, Pin("Mining", 4242, true))
 local circles = ns.GatherMateSeenCount()
-Check("the reset tooltip counts GatherMate2's nodes too", Tooltip("Remembered Nodes"):find((remembered + circles) .. " right now", 1, true) ~= nil)
 SlashCmdList.BETTERTRACKING("status")
 Check("status counts both sources", chat[#chat]:find("Nodes remembered: " .. (remembered + circles), 1, true) ~= nil, chat[#chat])
-Click("Remembered Nodes")
+SlashCmdList.BETTERTRACKING("reset")
 Check("Reset forgets every remembered node", remembered > 0 and ns.SeenCount() == 0, remembered .. " before")
 Check("and every node GatherMate2 remembers", circles > 0 and ns.GatherMateSeenCount() == 0, circles .. " before")
 

@@ -71,12 +71,9 @@ Open Options, AddOns, Better Tracking, type `/tra`, or left-click the minimap bu
 | Alert | Sound | Minimap Ping | One of six game sounds. Picking one plays it |
 | Alert | Flash the Minimap Edge | on | Ring flash on each alert |
 | Alert | Cooldown | 3 s | Shortest gap between two alerts |
-| Alert | Preview | Test | Plays the sound and the flash |
 | Minimap Nodes | Alert on Minimap Nodes | on | Minimap source switch |
 | Minimap Nodes | Gathering Nodes Only | on | Skips blips the game marks as a unit |
 | Minimap Nodes | Rares and Treasures | on | Pings when a rare or treasure shows on the minimap |
-| Minimap Nodes | Calibration | Calibrate | Forgets how to read the minimap, so the next hover learns it again. Before the first hover it says how to start |
-| Minimap Nodes | Remembered Nodes | Reset | Forgets every node both sources remember |
 | GatherMate2 | Also Ping at Spots GatherMate2 Remembers | off | GatherMate2 source switch |
 | GatherMate2 | Node Types | All | Herb Gathering, Mining, Fishing and Treasure. Shown only with GatherMate2 |
 

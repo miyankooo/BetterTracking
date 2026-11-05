@@ -21,4 +21,5 @@
 - Removed the tuning options for probes per frame, full sweep, only while moving, the muted-effects channel and flash thickness. Their defaults now always apply.
 - Rares and Treasures replaces Also Alert on Vignettes, and chat lines use plain sentences.
 - Settings open after combat when you ask for them during a fight.
+- The Test, Calibrate and Reset buttons left the settings, because they made Blizzard's Social settings report an error naming Better Tracking. `/tra test`, `/tra recalibrate` and `/tra reset` do the same.
 - The minimap scan costs the same at any frame rate, about a quarter of before at 60 fps, and rests while no tracking spell is on.
