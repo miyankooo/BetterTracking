@@ -1,25 +1,41 @@
-name: Package and release
+name: Release
 
-# Runs on version tags. Without CF_API_TOKEN and a toc X-Curse-Project-ID the packager skips the
-# CurseForge upload and only publishes the zip as a GitHub release.
+# Every push to main updates a release pull request from the Conventional Commits since the last
+# release, configured in release-please-config.json. Merging it tags vX.Y.Z, and this same job
+# packages the addon and uploads it to CurseForge and the GitHub release. A tag made with
+# GITHUB_TOKEN starts no other workflow, so packaging stays in this job. Without CF_API_TOKEN and
+# a toc X-Curse-Project-ID only the GitHub release gets the zip.
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-      GH_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      # Full history, so the packager can find the previous tag.
-      - uses: actions/checkout@v7
+      - id: release
+        uses: googleapis/release-please-action@v4
+
+      # Full history, so the packager finds the tag.
+      - if: ${{ steps.release.outputs.release_created }}
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: BigWigsMods/packager@v2
+      # The upload shows only this version's notes; CHANGELOG.md in the repo keeps the history.
+      - if: ${{ steps.release.outputs.release_created }}
+        env:
+          NOTES: ${{ steps.release.outputs.body }}
+        run: printf '%s\n' "$NOTES" > CHANGELOG.md
+
+      - if: ${{ steps.release.outputs.release_created }}
+        uses: BigWigsMods/packager@v2
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          GH_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}

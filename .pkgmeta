@@ -1,10 +1,13 @@
 package-as: BetterTracking
-manual-changelog: CHANGELOG.md
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
 
 ignore:
-  - CLAUDE.md
   - Tests
   - Tools
+  - release-please-config.json
 
 optional-dependencies:
   - gathermate2
