@@ -132,6 +132,30 @@ function ns.CalibrateNow()
   ns.Print(ok and READY or detail)
 end
 
+-- Temporary, like /tra types: one full sweep now, past every scan gate, shows in one line whether the minimap
+-- answers with the cursor elsewhere, whether the filter keeps its blips and whether the scan sees tracking on.
+function ns.ProbeNow()
+  if not ns.db.space then return ns.Print(ns.HOVER_HINT) end
+  if Minimap:IsMouseOver() then return ns.Print("Move the cursor off the minimap, then type /tra probe again.") end
+
+  local points = ns.DiscPoints()
+  local hits, wanted, names = 0, 0, {}
+  for _, point in ipairs(points) do
+    local data = ns.Probe(point[1], point[2])
+    if data then
+      hits = hits + 1
+      if IsWanted(data) then wanted = wanted + 1 end
+      local name = ns.BlipName(data)
+      if #names < 3 and not tContains(names, name) then names[#names + 1] = name end
+    end
+  end
+
+  local _, active = ns.ReadTracking()
+  local tracking = trackingOn and "yes" or active and "no, but the game says yes" or "no"
+  ns.Print(("Probe: %d of %d points hit a blip, %d pass the filter (%s). Tracking on: %s. Moving: %s."):format(
+    hits, #points, wanted, #names > 0 and table.concat(names, ", ") or NONE, tracking, ns.IsMoving() and YES or NO))
+end
+
 local function OnUpdate(_, elapsed)
   if not ns.db.blips then return end
 
@@ -201,6 +225,10 @@ local function OnEvent(_, event, ...)
     return
   end
 
+  -- Blizzard's tracking button notes the tracking list stays empty until SPELLS_CHANGED, so the login read
+  -- through the zoning hook can miss a tracking that is already on.
+  if event == "SPELLS_CHANGED" then return ReadTrackingOn() end
+
   ns.RebuildGeometry()
   if event == "MINIMAP_UPDATE_TRACKING" then
     ReadTrackingOn()
@@ -215,6 +243,7 @@ driver:SetScript("OnEvent", OnEvent)
 driver:RegisterEvent("MINIMAP_UPDATE_ZOOM")
 driver:RegisterEvent("MINIMAP_UPDATE_TRACKING")
 driver:RegisterEvent("VIGNETTE_MINIMAP_UPDATED")
+driver:RegisterEvent("SPELLS_CHANGED")
 
 function ns.ResetSeen()
   wipe(keyed)

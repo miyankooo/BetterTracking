@@ -174,6 +174,13 @@ _G.PlaySound = function(id, channel)
   lastChannel = channel
 end
 _G.NONE, _G.ALL, _G.RESET, _G.SECOND_ONELETTER_ABBR = "None", "All", "Reset", "%d s"
+_G.YES, _G.NO = "Yes", "No"
+_G.tContains = function(list, value)
+  for _, item in ipairs(list) do
+    if item == value then return true end
+  end
+  return false
+end
 _G.NORMAL_FONT_COLOR = { GetRGB = function() return 1, 0.82, 0 end }
 _G.RED_FONT_COLOR = { WrapTextInColorCode = function(_, text) return text end }
 _G.YELLOW_FONT_COLOR = { WrapTextInColorCode = function(_, text) return text end }
@@ -198,7 +205,14 @@ _G.Minimap = {
   GetCenter = function() return 500, 400 end,
   GetEffectiveScale = function() return 1 end,
   IsMouseOver = function(self) return self.mouseIsOver end,
-  UpdateMouseoverAtPoint = function(_, x, y)
+  softCursor = false,
+  SetUsingSoftCursor = function(self, on) self.softCursor = on end,
+  -- The engine answers a point only for the soft cursor or under the hardware cursor.
+  UpdateMouseoverAtPoint = function(self, x, y)
+    if not (self.softCursor or self.mouseIsOver) then
+      mouseover = nil
+      return
+    end
     if engineSpace == "screen" then
       x, y = x - 500, y - 400
     elseif engineSpace == "unit" then
@@ -615,10 +629,14 @@ Fire("MINIMAP_UPDATE_TRACKING")
 Tick(300)
 Check("without a spell tracking the scan stays idle", probes == 0, probes .. " probes")
 
+-- At login the tracking list can fill in after the zoning read, with no tracking event to follow.
 tracking[3].active = true
-Fire("MINIMAP_UPDATE_TRACKING")
 Tick(60)
-Check("any spell tracking starts it", probes > 0, probes .. " probes")
+Check("a tracking the scan has not read yet keeps it idle", probes == 0, probes .. " probes")
+Fire("SPELLS_CHANGED")
+Tick(60)
+Check("SPELLS_CHANGED reads it, and any spell tracking starts the scan", probes > 0, probes .. " probes")
+Check("every probe hands the soft cursor back", Minimap.softCursor == false)
 
 print("scan rate")
 
@@ -1015,6 +1033,14 @@ ns.db.gatherMate = true
 ns.ResetSeen()
 Tick(600)
 local remembered = ns.SeenCount()
+SlashCmdList.BETTERTRACKING("probe")
+local probeHits, probeWanted = chat[#chat]:match("Probe: (%d+) of %d+ points hit a blip, (%d+) pass the filter")
+Check("/tra probe sweeps the minimap and counts the blips", tonumber(probeHits or 0) > 0
+  and probeHits == probeWanted and chat[#chat]:find("Tracking on: yes", 1, true) ~= nil, chat[#chat])
+Minimap.mouseIsOver = true
+SlashCmdList.BETTERTRACKING("probe")
+Minimap.mouseIsOver = false
+Check("and asks for the cursor off the minimap first", chat[#chat]:find("Move the cursor off the minimap", 1, true) ~= nil, chat[#chat])
 clock = clock + 5
 hooks.addMiniPin(display, Pin("Mining", 4242, true))
 local circles = ns.GatherMateSeenCount()

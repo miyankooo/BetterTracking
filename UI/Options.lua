@@ -248,6 +248,9 @@ function SlashCmdList.BETTERTRACKING(input)
   elseif command == "types" then
     ReportTypes()
 
+  elseif command == "probe" then
+    ns.ProbeNow()
+
   elseif command == "reset" then
     ForgetNodes()
 

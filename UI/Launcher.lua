@@ -68,6 +68,7 @@ ns.OnSettingsLoaded(function()
   local events = CreateFrame("Frame")
   events:SetScript("OnEvent", UpdateIcon)
   events:RegisterEvent("MINIMAP_UPDATE_TRACKING")
+  events:RegisterEvent("SPELLS_CHANGED")
 end)
 
 ns.OnZoning(UpdateIcon)

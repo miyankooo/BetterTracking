@@ -43,7 +43,15 @@ function ns.ProbeAt(dx, dy, space)
   local x, y = ToSpace(dx, dy, space)
   if not x then return nil end
 
-  if not pcall(Minimap.UpdateMouseoverAtPoint, Minimap, x, y) then
+  -- Without the soft cursor the engine reads the minimap only under the hardware cursor, so a probe with the
+  -- cursor elsewhere finds nothing. It goes back off at once, so the player's own hover tooltip still works.
+  -- shortcut: assumes no gamepad soft cursor is in use, keep its state if a gamepad player reports a dead minimap tooltip.
+  Minimap:SetUsingSoftCursor(true)
+  local ok = pcall(Minimap.UpdateMouseoverAtPoint, Minimap, x, y)
+  local data = ok and C_TooltipInfo.GetMinimapMouseover()
+  Minimap:SetUsingSoftCursor(false)
+
+  if not ok then
     failedSpaces[space] = true
     if space == ns.db.space then
       ns.readFailed = true
@@ -52,7 +60,6 @@ function ns.ProbeAt(dx, dy, space)
     return nil
   end
 
-  local data = C_TooltipInfo.GetMinimapMouseover()
   if ns.BlipName(data) then return data end
 end
 
