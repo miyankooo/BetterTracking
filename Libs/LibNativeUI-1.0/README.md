@@ -107,6 +107,7 @@ ns.TogglePanel = UI.CreateToggle(build)
 What the window gives you:
 
 - `ButtonFrameTemplate` with the portrait, the title, the inset, the attic and the button bar.
+- The template's grey stone background, as in the Auction House. Insets keep only their border on it, without their marble tile.
 - Strata `HIGH`, toplevel, clamped and movable.
 - Escape closes it through `UISpecialFrames`, never `UIPanelWindows`.
 - The close button also works in combat, through `onCloseCallback`.
@@ -155,7 +156,7 @@ dialog:Fit()
 
 Containers and tooltips:
 
-- `UI.CreateInset(parent)`
+- `UI.CreateInset(parent)`, an inset border on the window's stone, without its marble tile
 - `UI.CreateSection(parent, title)`, which gives `section.body` and `section:SetBodyHeight(h)`
 - `UI.StackBelow(frame, above, gap)`
 - `UI.CreateScroll(parent, name)`, which gives `scroll.content`

@@ -1,7 +1,7 @@
 -- LibNativeUI-1.0: a native UI design system for WoW Forever addons. Style tokens on a 4px grid, font
 -- roles at 12 and 16 px on Blizzard's own font objects, and window, dialog, control and launcher builders
 -- made only from Blizzard templates. Every addon embeds an identical copy; LibStub keeps the highest MINOR.
-local MAJOR, MINOR = "LibNativeUI-1.0", 3
+local MAJOR, MINOR = "LibNativeUI-1.0", 5
 local UI = LibStub:NewLibrary(MAJOR, MINOR)
 if not UI then return end
 
@@ -202,8 +202,13 @@ function UI.CreateRemoveButton(parent)
     return button
 end
 
+-- An inset is its border on the window's grey stone, like the Auction House's category list
+-- (Mainline/Blizzard_AuctionHouseCategoriesList.xml:60). Its marble tile goes, as Forever's Group Finder
+-- hides it (Blizzard_LFGVanilla_Listing.lua:81).
 function UI.CreateInset(parent)
-    return CreateFrame("Frame", nil, parent, "InsetFrameTemplate")
+    local inset = CreateFrame("Frame", nil, parent, "InsetFrameTemplate")
+    inset.Bg:Hide()
+    return inset
 end
 
 local function setBodyHeight(section, height)
@@ -296,6 +301,10 @@ end
 function UI.CreateWindow(spec)
     local frame = CreateFrame("Frame", spec.name, UIParent, "ButtonFrameTemplate")
     frame:SetSize(spec.width, spec.height)
+
+    -- The template's grey stone, UI-Background-Rock, is the Auction House's background too. The inset
+    -- keeps only its border on it, as UI.CreateInset's does.
+    frame.Inset.Bg:Hide()
     frame:SetTitle(spec.title)
     frame:SetPortraitToAsset(spec.icon)
 
