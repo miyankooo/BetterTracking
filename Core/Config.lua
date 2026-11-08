@@ -59,16 +59,16 @@ end
 -- Restricted content can hand values out as secrets, which break comparisons and table keys. issecretvalue
 -- is declared SecretArguments "AllowedWhenUntainted", and even comparing a secret with nil may raise, so
 -- both run under pcall, where a raise can only mean secret.
-function ns.IsSecret(value)
+function ns.CanAccess(value)
   local ok, secret = pcall(CheckSecret, value)
-  return not ok or secret
+  return ok and not secret
 end
 
 -- Speed is secret where unit stats are restricted, and a secret cannot be compared, so an unknown speed
 -- counts as standing still.
 function ns.IsMoving()
   local speed = GetUnitSpeed("player")
-  return not ns.IsSecret(speed) and speed ~= 0
+  return ns.CanAccess(speed) and speed ~= 0
 end
 
 -- Table defaults are copied, so a saved table never aliases the defaults it was filled from.

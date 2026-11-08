@@ -66,7 +66,7 @@ local function IsCasting()
   local casting, channeling = UnitCastingInfo("player"), UnitChannelInfo("player")
 
   -- A secret cast name cannot be compared, so it counts as a cast in progress.
-  return ns.IsSecret(casting) or ns.IsSecret(channeling) or casting ~= nil or channeling ~= nil
+  return not ns.CanAccess(casting) or not ns.CanAccess(channeling) or casting ~= nil or channeling ~= nil
 end
 
 local function IsEnemy(unit)
@@ -159,7 +159,7 @@ end
 -- The tracking mirror can lag the cast, so the cast event confirms a timed swap first. The spell ID is secret
 -- while casts are restricted, and a secret confirms nothing.
 local function OnCastSucceeded(spellID)
-  if pendingKind and not ns.IsSecret(spellID) and KIND_BY_SPELL[spellID] == pendingKind then
+  if pendingKind and ns.CanAccess(spellID) and KIND_BY_SPELL[spellID] == pendingKind then
     pendingKind, misses = nil, 0
   end
 end

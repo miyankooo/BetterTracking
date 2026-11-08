@@ -32,7 +32,7 @@ ns.observedTypes = {}
 -- as a key, so it reads as unwanted.
 local function IsWanted(data)
   local dataType = data.type
-  if ns.IsSecret(dataType) then return false end
+  if not ns.CanAccess(dataType) then return false end
 
   ns.observedTypes[dataType == nil and "untyped" or dataType] = true
   if not ns.db.objectsOnly then return true end
@@ -40,7 +40,7 @@ local function IsWanted(data)
   -- The type may not separate units from nodes on the minimap, so a GUID that names a unit kind is the
   -- second, exact test. An unknown or absent GUID passes, so a format change can never silence nodes.
   local guid = data.guid
-  if guid and not ns.IsSecret(guid) and UNIT_KINDS[guid:match("^(%a+)%-")] then return false end
+  if guid and ns.CanAccess(guid) and UNIT_KINDS[guid:match("^(%a+)%-")] then return false end
 
   if dataType == nil then return true end
   return dataType == Enum.TooltipDataType.Object or dataType == Enum.TooltipDataType.MinimapMouseover
@@ -64,7 +64,7 @@ local function Consider(data, dx, dy, silent)
   -- A guid is an exact identity, so it tells apart two nodes of one kind when the blip tooltip happens to
   -- carry one. A secret guid cannot be a key, so the name stands in.
   local guid = data.guid
-  local key = guid and not ns.IsSecret(guid) and guid or name
+  local key = guid and ns.CanAccess(guid) and guid or name
 
   local isNew
   local x, y = ns.WorldFromOffset(dx, dy)
@@ -188,7 +188,7 @@ end
 -- Prune ages it out like any other node.
 local function VignetteName(vignetteGUID)
   local info = C_VignetteInfo.GetVignetteInfo(vignetteGUID)
-  if info and not ns.IsSecret(info.name) then return info.name end
+  if info and ns.CanAccess(info.name) then return info.name end
 end
 
 local function OnVignette(vignetteGUID, onMinimap)

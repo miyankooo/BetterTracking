@@ -71,7 +71,7 @@ end
 -- A secret name can be neither compared nor used as a key, so it reads as no blip at all.
 function ns.BlipName(data)
   local name = data and data.lines and data.lines[1] and data.lines[1].leftText
-  if name and not ns.IsSecret(name) then return name end
+  if name and ns.CanAccess(name) then return name end
 end
 
 function ns.CursorOffset()
