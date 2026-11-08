@@ -85,9 +85,8 @@ local function BuildPanel(introText, restoreDefaults)
   return panel
 end
 
--- One row below the intro, its label in GameFontNormal from x 37 to the row's centre less 85. A checkbox
--- (SettingsCheckboxTemplate) goes at the row's CENTER -80, a WowStyle1DropdownTemplate 220 wide at CENTER -48.
--- Within one page, controls share one left edge.
+-- One row below the intro, its label in GameFontNormal from x 37 to the row's centre less 85. Its control starts at
+-- the page's one left edge, CONTROL_X.
 local function AddRow(panel, index, label, fillTooltip)
   local y = -INTRO_GAP - (index - 1) * (ROW_HEIGHT + ROW_SPACING)
   local row = CreateFrame("Frame", nil, panel)

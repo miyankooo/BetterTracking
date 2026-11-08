@@ -230,7 +230,7 @@ function ns.ToggleSwap()
   ns.db.swap = not ns.db.swap
   ns.ApplySwap()
 
-  -- An open settings page needs telling, since its checkbox changes only on a click.
+  -- An open settings page follows, since its checkbox changes only on a click, and a swap turned on retires the tip.
   ns.SwapChanged()
 
   if not ns.db.swap then
