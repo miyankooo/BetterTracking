@@ -107,11 +107,11 @@ ns.TogglePanel = UI.CreateToggle(build)
 What the window gives you:
 
 - `ButtonFrameTemplate` with the portrait, the title, the inset, the attic and the button bar.
-- The template's grey stone background, as in the Auction House. Insets keep only their border on it, without their marble tile.
+- The wardrobe's brown panel in the inset's place, `window.Background` (`CollectionsBackgroundTemplate` without its corner ornaments). The attic and the button bar keep the template's grey stone.
 - Strata `HIGH`, toplevel, clamped and movable.
 - Escape closes it through `UISpecialFrames`, never `UIPanelWindows`.
 - The close button also works in combat, through `onCloseCallback`.
-- Content goes into `window.Inset`, padded by `UI.Space.padding`. A second column is `UI.CreateInset(window)`, 8 px to the right.
+- Content goes into `window.Inset`, padded by `UI.Space.padding`. For a second column, narrow `window.Inset`, add a plain frame 8 px to its right, stretch `window.Background` over both and split them with `UI.CreateVerticalDivider(window.Background)` in the middle of the gap. Never put an inset on the brown panel.
 - The attic holds one line: a status line in `body` from `UI.Native.titleLeft`, or controls such as a search box or a filter dropdown.
 
 ## Dialog
@@ -156,7 +156,8 @@ dialog:Fit()
 
 Containers and tooltips:
 
-- `UI.CreateInset(parent)`, an inset border on the window's stone, without its marble tile
+- `UI.CreateInset(parent)`, an inset border on the stone, without its marble tile: a status box in the button bar or a block on a settings page
+- `UI.CreateVerticalDivider(parent)`, the gold Settings divider stood on end, which splits the brown panel into columns
 - `UI.CreateSection(parent, title)`, which gives `section.body` and `section:SetBodyHeight(h)`
 - `UI.StackBelow(frame, above, gap)`
 - `UI.CreateScroll(parent, name)`, which gives `scroll.content`

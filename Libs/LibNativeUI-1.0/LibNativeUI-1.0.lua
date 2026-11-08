@@ -1,7 +1,7 @@
 -- LibNativeUI-1.0: a native UI design system for WoW Forever addons. Style tokens on a 4px grid, font
 -- roles at 12 and 16 px on Blizzard's own font objects, and window, dialog, control and launcher builders
 -- made only from Blizzard templates. Every addon embeds an identical copy; LibStub keeps the highest MINOR.
-local MAJOR, MINOR = "LibNativeUI-1.0", 5
+local MAJOR, MINOR = "LibNativeUI-1.0", 6
 local UI = LibStub:NewLibrary(MAJOR, MINOR)
 if not UI then return end
 
@@ -202,13 +202,25 @@ function UI.CreateRemoveButton(parent)
     return button
 end
 
--- An inset is its border on the window's grey stone, like the Auction House's category list
--- (Mainline/Blizzard_AuctionHouseCategoriesList.xml:60). Its marble tile goes, as Forever's Group Finder
--- hides it (Blizzard_LFGVanilla_Listing.lua:81).
+-- An inset is its border on the stone, like the Auction House's category list
+-- (Mainline/Blizzard_AuctionHouseCategoriesList.xml:60), for a status box in a window's button bar or a
+-- block on a settings page. Its marble tile goes, as Forever's Group Finder hides it
+-- (Blizzard_LFGVanilla_Listing.lua:81). Inside a window's brown panel, columns split by a divider instead.
 function UI.CreateInset(parent)
     local inset = CreateFrame("Frame", nil, parent, "InsetFrameTemplate")
     inset.Bg:Hide()
     return inset
+end
+
+-- The gold divider under every Settings panel title (Options_HorizontalDivider) stood on end, to split a
+-- window's brown panel into columns. Blizzard's SetClampedTextureRotation turns it a quarter and swaps
+-- its size and texture coordinates (Blizzard_SharedXMLBase/TextureUtil.lua). Callers anchor its top and
+-- bottom.
+function UI.CreateVerticalDivider(parent)
+    local divider = parent:CreateTexture(nil, "ARTWORK")
+    divider:SetAtlas("Options_HorizontalDivider", true)
+    SetClampedTextureRotation(divider, 90)
+    return divider
 end
 
 local function setBodyHeight(section, height)
@@ -295,16 +307,27 @@ local function makeMovable(frame, name, strata, position)
     tinsert(UISpecialFrames, name)
 end
 
+-- The collections panel's ornaments, which a tool window leaves out.
+local BACKGROUND_CORNERS = { "BGCornerTopLeft", "BGCornerTopRight", "BGCornerBottomLeft", "BGCornerBottomRight" }
+
 -- A tool window on ButtonFrameTemplate: portrait, title bar, close button, inset, attic and button bar
--- come from the template. spec: name, title, icon, width, height, and optionally position (a saved table
+-- come from the template, and window.Background is the brown panel in the inset's place. spec: name, title, icon, width, height, and optionally position (a saved table
 -- it reads and writes), attic (a height, or false to drop it) and buttonBar (false to drop it).
 function UI.CreateWindow(spec)
     local frame = CreateFrame("Frame", spec.name, UIParent, "ButtonFrameTemplate")
     frame:SetSize(spec.width, spec.height)
 
-    -- The template's grey stone, UI-Background-Rock, is the Auction House's background too. The inset
-    -- keeps only its border on it, as UI.CreateInset's does.
+    -- The wardrobe's brown panel takes the inset's place (CollectionsBackgroundTemplate,
+    -- Mainline/SharedCollectionTemplates.xml): its own inset border, the collections tile and its soft
+    -- shadow, without the four corner ornaments. The template's Inset stays the content parent but draws
+    -- nothing. Both take the window's frame level (useParentLevel), so content in the Inset sits above.
     frame.Inset.Bg:Hide()
+    frame.Inset.NineSlice:Hide()
+    local background = CreateFrame("Frame", nil, frame, "CollectionsBackgroundTemplate")
+    background:ClearAllPoints()
+    background:SetAllPoints(frame.Inset)
+    for _, corner in ipairs(BACKGROUND_CORNERS) do background[corner]:Hide() end
+    frame.Background = background
     frame:SetTitle(spec.title)
     frame:SetPortraitToAsset(spec.icon)
 
