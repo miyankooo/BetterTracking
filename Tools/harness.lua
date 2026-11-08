@@ -319,7 +319,7 @@ _G.hooksecurefunc = function(owner, name, hook)
   end
 end
 
--- The real LibStub and LibNativeUI load from disk. The launcher's libraries and AceAddon are reduced to the
+-- The real LibStub loads from disk. The launcher's libraries and AceAddon are reduced to the
 -- calls the addon makes, and installed right after LibStub loads.
 local brokers, icons = {}, {}
 

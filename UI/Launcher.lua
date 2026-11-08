@@ -1,11 +1,9 @@
 local _, ns = ...
 
-local UI = LibStub("LibNativeUI-1.0")
-
 -- Matches the toc IconTexture. Blizzard's own pet bar uses the same path (Shared/PetActionBar.lua).
 local ICON = "Interface\\Icons\\inv_10_dungeonjewelry_explorer_trinket_1compass_color1"
 
-local launcher
+local setMinimapShown
 
 -- One line that says whether a ping can come at all, and if not, what the player has to do.
 function ns.StatusText()
@@ -47,6 +45,32 @@ local function OnClick(button)
   end
 end
 
+-- One launcher for the minimap button and the Addon Compartment: LibDBIcon draws the button and adds the
+-- compartment entry through AddonCompartmentFrame, so both share the click and the tooltip. Such an addon has no
+-- AddonCompartmentFunc toc keys. LibStub, CallbackHandler-1.0, LibDataBroker-1.1 and LibDBIcon-1.0 load first.
+local function CreateLauncher(icon, db, onClick, fillTooltip)
+  local LDBIcon = LibStub("LibDBIcon-1.0")
+  if not LDBIcon:IsRegistered(ns.title) then
+    local object = LibStub("LibDataBroker-1.1"):NewDataObject(ns.title, {
+      type = "launcher",
+      text = ns.title,
+      icon = icon,
+      OnClick = function(_, button) onClick(button) end,
+      OnTooltipShow = function(tooltip)
+        GameTooltip_SetTitle(tooltip, ns.title)
+        fillTooltip(tooltip)
+      end,
+    })
+    LDBIcon:Register(ns.title, object, db)
+    LDBIcon:AddButtonToCompartment(ns.title)
+  end
+  -- Shows or hides only the minimap button and remembers it in db.hide; the addon menu entry stays.
+  return function(shown)
+    db.hide = not shown
+    if shown then LDBIcon:Show(ns.title) else LDBIcon:Hide(ns.title) end
+  end
+end
+
 -- The button shows what is tracked right now, so it visibly alternates while the swap runs. Login and
 -- /reload go through the zoning hook, so a tracking that is already on shows before any change.
 local function UpdateIcon()
@@ -57,13 +81,7 @@ end
 -- The minimap button and the addon menu entry share this click and tooltip. The minimap position lives in
 -- the account-wide db, so every character shares it.
 ns.OnSettingsLoaded(function()
-  launcher = UI.CreateLauncher({
-    title = ns.title,
-    icon = ICON,
-    db = ns.db.minimap,
-    onClick = OnClick,
-    tooltip = FillTooltip,
-  })
+  setMinimapShown = CreateLauncher(ICON, ns.db.minimap, OnClick, FillTooltip)
 
   local events = CreateFrame("Frame")
   events:SetScript("OnEvent", UpdateIcon)
@@ -76,6 +94,6 @@ ns.OnZoning(UpdateIcon)
 -- Flips only the minimap button; the addon menu entry always stays.
 function ns.ToggleMinimap()
   local show = ns.db.minimap.hide
-  launcher.setShown(show)
+  setMinimapShown(show)
   ns.Print(show and "Minimap button shown." or "Minimap button hidden. Type /tra minimap to show it again.")
 end
