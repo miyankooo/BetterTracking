@@ -1127,52 +1127,90 @@ world = allNodes
 player.x, player.y = 0, 0
 ns.db.blips = false
 
-print("help tip")
-local function SwapTip()
-  for _, frame in ipairs(frames) do
-    if frame.template == "HelpTipTemplate" and frame.parent == Control("Swap Herbs and Minerals") then return frame end
+-- The tip and command checks share their helpers in one block, which keeps the main chunk under Lua's local limit.
+do
+  print("help tip")
+  local function SwapTip()
+    for _, frame in ipairs(frames) do
+      if frame.template == "HelpTipTemplate" and frame.parent == Control("Swap Herbs and Minerals") then return frame end
+    end
   end
-end
-local function TipShown()
+  local function TipShown()
+    local tip = SwapTip()
+    return tip ~= nil and tip.shown and rawget(tip, "info") ~= nil
+  end
+
+  Check("no tip before the page shows", SwapTip() == nil)
+  OpenPage()
   local tip = SwapTip()
-  return tip ~= nil and tip.shown and rawget(tip, "info") ~= nil
+  Check("the first show of the page shows the tip at the swap checkbox", TipShown()
+    and tip.info.text == "Turn on Swap Herbs and Minerals to see herb and ore nodes on the minimap at once."
+    and tip.info.buttonStyle == HelpTip.ButtonStyle.Close and tip.info.targetPoint == HelpTip.Point.RightEdgeCenter)
+  OpenPage()
+  ns.ReplayTip()
+  Check("a refresh or a replay while it is up does not show it twice", tip.inits == 1, tip.inits)
+  ClosePage()
+  Check("it hides with the page without being marked", not TipShown() and ns.db.tipSeen == nil)
+  OpenPage()
+  Check("and shows again at the page's next show", TipShown() and tip.inits == 2)
+  tip:Acknowledge()
+  Check("its close button retires it for the account", not TipShown() and ns.db.tipSeen == true)
+  ClosePage()
+  OpenPage()
+  Check("so the next show has no tip", not TipShown())
+
+  ns.ReplayTip()
+  Check("a replay brings it back at once on the open page", TipShown() and ns.db.tipSeen == nil)
+  ClosePage()
+  Check("and a tip closed once before still hides unmarked", ns.db.tipSeen == nil)
+  OpenPage()
+  Control("Swap Herbs and Minerals"):Click()
+  Check("turning on the swap is the feature in use and retires it", not TipShown() and ns.db.tipSeen == true)
+  Control("Swap Herbs and Minerals"):Click()
+  ns.db.tipSeen = nil
+  ClosePage()
+  SlashCmdList.BETTERTRACKING("swap")
+  Check("so does turning it on by command while the page is closed", ns.db.tipSeen == true)
+  SlashCmdList.BETTERTRACKING("swap")
+  OpenPage()
+  Check("and the page shows no tip then", not TipShown())
+  ClosePage()
+
+  print("commands")
+  local function Command(input)
+    local before = #chat
+    settingsPage.opened = nil
+    SlashCmdList.BETTERTRACKING(input)
+    return #chat - before, chat[#chat]
+  end
+
+  local lines, line = Command("")
+  Check("the bare command opens the settings and says nothing", settingsPage.opened == 42 and lines == 0)
+  lines, line = Command("help")
+  Check("help prints one line naming every command", lines == 1 and settingsPage.opened == nil
+    and line == PREFIX .. "Type /tra for the settings, /tra swap to turn the herb and ore swap on or off, /tra status "
+    .. "to see what runs and why the swap waits, /tra test to play the alert, /tra reset to forget every node, /tra "
+    .. "minimap to show or hide the minimap button, /tra intro to see the welcome line and the tip again, or /tra help "
+    .. "for this list.", line)
+  local helpLine = line
+  lines, line = Command(" ? ")
+  Check("and so does ?", lines == 1 and line == helpLine)
+  lines, line = Command("intro")
+  Check("intro prints the welcome line again", lines == 1 and line:find(WELCOME, 1, true) ~= nil, line)
+  Check("and clears the tip's flag", ns.db.tipSeen == nil)
+  OpenPage()
+  Check("so the tip shows at the page's next show", TipShown())
+  local initsBefore = SwapTip().inits
+  Command("intro")
+  Check("intro with the page open keeps the one tip", TipShown() and SwapTip().inits == initsBefore,
+    SwapTip().inits - initsBefore)
+  ClosePage()
+  Check("which still hides unmarked", ns.db.tipSeen == nil)
+  lines, line = Command("sawp")
+  Check("an unknown word prints the hint and opens nothing", lines == 1 and settingsPage.opened == nil
+    and line == PREFIX .. "Unknown command. Type /tra help for the list.", line)
+  settingsPage.opened = nil
 end
-
-Check("no tip before the page shows", SwapTip() == nil)
-OpenPage()
-local tip = SwapTip()
-Check("the first show of the page shows the tip at the swap checkbox", TipShown()
-  and tip.info.text == "Turn on Swap Herbs and Minerals to see herb and ore nodes on the minimap at once."
-  and tip.info.buttonStyle == HelpTip.ButtonStyle.Close and tip.info.targetPoint == HelpTip.Point.RightEdgeCenter)
-OpenPage()
-ns.ReplayTip()
-Check("a refresh or a replay while it is up does not show it twice", tip.inits == 1, tip.inits)
-ClosePage()
-Check("it hides with the page without being marked", not TipShown() and ns.db.tipSeen == nil)
-OpenPage()
-Check("and shows again at the page's next show", TipShown() and tip.inits == 2)
-tip:Acknowledge()
-Check("its close button retires it for the account", not TipShown() and ns.db.tipSeen == true)
-ClosePage()
-OpenPage()
-Check("so the next show has no tip", not TipShown())
-
-ns.ReplayTip()
-Check("a replay brings it back at once on the open page", TipShown() and ns.db.tipSeen == nil)
-ClosePage()
-Check("and a tip closed once before still hides unmarked", ns.db.tipSeen == nil)
-OpenPage()
-Control("Swap Herbs and Minerals"):Click()
-Check("turning on the swap is the feature in use and retires it", not TipShown() and ns.db.tipSeen == true)
-Control("Swap Herbs and Minerals"):Click()
-ns.db.tipSeen = nil
-ClosePage()
-SlashCmdList.BETTERTRACKING("swap")
-Check("so does turning it on by command while the page is closed", ns.db.tipSeen == true)
-SlashCmdList.BETTERTRACKING("swap")
-OpenPage()
-Check("and the page shows no tip then", not TipShown())
-ClosePage()
 
 print("settings panel")
 Check("the canvas page registers at login", settingsPage.registered and settingsPage.title == "Better Tracking")

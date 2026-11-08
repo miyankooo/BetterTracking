@@ -328,7 +328,8 @@ local function BuildAlertRows(panel)
   AddSliderRow(panel, {
     key = "cooldown",
     label = "Cooldown",
-    help = "Shortest gap between two alerts. A node noticed during the cooldown stays silent, so a cluster is one alert.",
+    help = "Shortest gap between two alerts. A node noticed during the cooldown stays silent, so a cluster is one"
+      .. " alert.",
     minimum = 1,
     maximum = 30,
     format = FormatSeconds,
@@ -461,11 +462,27 @@ local function ReportTypes()
   end
 end
 
+-- calibrate, recalibrate, types and probe are temporary tools for the in-game test, so help leaves them out.
+local HELP = "Type /tra for the settings, /tra swap to turn the herb and ore swap on or off, /tra status to see what "
+  .. "runs and why the swap waits, /tra test to play the alert, /tra reset to forget every node, /tra minimap to show "
+  .. "or hide the minimap button, /tra intro to see the welcome line and the tip again, or /tra help for this list."
+
+-- One long command and one short alias. The bare command opens the settings; help, intro and minimap are the
+-- words every addon of the set shares, and any word it does not know prints the hint and opens nothing.
 SLASH_BETTERTRACKING1, SLASH_BETTERTRACKING2 = "/bettertracking", "/tra"
 function SlashCmdList.BETTERTRACKING(input)
   local command = strlower(strtrim(input or ""))
 
-  if command == "calibrate" then
+  if command == "" then
+    ns.OpenSettings()
+
+  elseif command == "help" or command == "?" then
+    ns.Print(HELP)
+
+  elseif command == "intro" then
+    ns.ReplayIntro()
+
+  elseif command == "calibrate" then
     ns.CalibrateNow()
 
   elseif command == "status" then
@@ -496,6 +513,6 @@ function SlashCmdList.BETTERTRACKING(input)
     ns.PreviewAlert()
 
   else
-    ns.OpenSettings()
+    ns.Print("Unknown command. Type /tra help for the list.")
   end
 end

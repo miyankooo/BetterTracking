@@ -17,6 +17,12 @@ function ns.PrintWelcome()
     .. "swap. Pings start once you turn on Find Herbs or Find Minerals and hover a blip near the minimap edge.")
 end
 
+-- /tra intro: the welcome line now, and the tip again at its next chance.
+function ns.ReplayIntro()
+  ns.PrintWelcome()
+  ns.ReplayTip()
+end
+
 -- Another addon's link may come from a line kept from restricted content, so it is checked before the comparison.
 EventRegistry:RegisterCallback("SetItemRef", function(_, link)
   if ns.CanAccess(link) and link == LINK then ns.OpenSettings() end
