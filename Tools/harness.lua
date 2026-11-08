@@ -1404,8 +1404,10 @@ Check("and opens the category once combat ends", settingsPage.opened == 42)
 SlashCmdList.BETTERTRACKING("minimap")
 Check("/tra minimap hides the button and says how to bring it back", not icons["Better Tracking"].shown and ns.db.minimap.hide
   and chat[#chat] == PREFIX .. "Minimap button hidden. Type /tra minimap to show it again.", chat[#chat])
+local linesBeforeShow = #chat
 SlashCmdList.BETTERTRACKING("minimap")
-Check("and shows it again", icons["Better Tracking"].shown and chat[#chat] == PREFIX .. "Minimap button shown.", chat[#chat])
+Check("and shows it again without a line", icons["Better Tracking"].shown and not ns.db.minimap.hide
+  and #chat == linesBeforeShow, chat[#chat])
 
 print("herb and ore swap")
 local function Advance(seconds) Tick(math.floor(seconds * 60 + 0.5)) end

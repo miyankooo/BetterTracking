@@ -91,9 +91,10 @@ end)
 
 ns.OnZoning(UpdateIcon)
 
--- Flips only the minimap button; the addon menu entry always stays.
+-- Flips only the minimap button; the addon menu entry always stays. A button that comes back shows itself, so only
+-- hiding it prints, with the way back.
 function ns.ToggleMinimap()
   local show = ns.db.minimap.hide
   setMinimapShown(show)
-  ns.Print(show and "Minimap button shown." or "Minimap button hidden. Type /tra minimap to show it again.")
+  if not show then ns.Print("Minimap button hidden. Type /tra minimap to show it again.") end
 end
