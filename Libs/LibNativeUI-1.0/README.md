@@ -207,7 +207,7 @@ launcher.setShown(MyAddonDB.minimap.hide)
 
 ## Keeping the copies in sync
 
-- Reference copy: `ChatScan/Libs/LibNativeUI-1.0/`. Every other addon carries a byte-identical copy.
-- Changing it: edit the reference copy, raise `MINOR`, run `lua Tests/LibNativeUI.lua` from the ChatScan folder, then copy the folder into every addon that embeds it. LibStub always keeps the highest `MINOR` loaded, so mixed versions never break, but the copies should not drift.
+- Reference copy: `TargetFinder/Libs/LibNativeUI-1.0/`. Every other addon carries a byte-identical copy.
+- Changing it: edit the reference copy, raise `MINOR`, run `lua Tests/LibNativeUI.lua` from the TargetFinder folder, then copy the folder into every addon that embeds it. LibStub always keeps the highest `MINOR` loaded, so mixed versions never break, but the copies should not drift.
 - Checking it: from the AddOns folder, run `shasum */Libs/LibNativeUI-1.0/LibNativeUI-1.0.lua`. It must print one hash.
 - A new addon: copy the folder, add the toc lines, and build its window or dialog, launcher and slash command from this library.
