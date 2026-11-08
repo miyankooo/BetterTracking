@@ -1397,6 +1397,13 @@ Check("types raises no error", pcall(SlashCmdList.BETTERTRACKING, "types"))
 Check("calibrate raises no error", pcall(SlashCmdList.BETTERTRACKING, "calibrate"))
 Check("/bettertracking is the long command", SLASH_BETTERTRACKING1 == "/bettertracking" and SLASH_BETTERTRACKING2 == "/tra")
 
+print("native art")
+local customArt = {}
+for _, path in ipairs(TocFiles()) do
+  if not path:find("^Libs/") and io.open(path):read("a"):find("AddOns\\\\", 1, true) then customArt[#customArt + 1] = path end
+end
+Check("no addon file draws art from its own folder", #customArt == 0, table.concat(customArt, ", "))
+
 print("chat lines")
 local unprefixed = {}
 for _, line in ipairs(chat) do

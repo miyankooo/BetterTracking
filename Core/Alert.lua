@@ -1,7 +1,12 @@
-local addonName, ns = ...
+local _, ns = ...
 
 local ZONING_QUIET = 5
-local FLASH_TEXTURE = "Interface\\AddOns\\" .. addonName .. "\\Media\\pulse_ring"
+
+-- Blizzard's own minimap pulse: the glow Forever's Minimap.xml flashes on the button at the minimap's edge
+-- (Blizzard_Minimap/Mainline/Minimap.xml:171, MinimapPulseAnim). The atlas's ring runs 33 px across its 46 px art,
+-- so the art is drawn that much larger than the minimap to lay the ring on the minimap's edge.
+local GLOW_ATLAS = "GarrLanding-CircleGlow"
+local GLOW_SCALE = 46 / 33
 
 ns.sounds = {
   { name = "Minimap Ping", id = SOUNDKIT.MAP_PING },
@@ -19,13 +24,12 @@ flash:SetAllPoints(Minimap)
 flash:SetFrameLevel(Minimap:GetFrameLevel() + 7)
 flash:Hide()
 
+-- Added like Blizzard's pulse, and desaturated so the vertex colour alone sets the hue.
 local ring = flash:CreateTexture(nil, "OVERLAY")
-ring:SetAllPoints(flash)
-ring:SetTexture(FLASH_TEXTURE)
-
--- The texture is a 4x4 atlas of ten rings from hairline to bold, because the client cannot draw a ring at
--- runtime. The fourth cell is a medium ring.
-ring:SetTexCoord(0.75, 1, 0, 0.25)
+ring:SetPoint("CENTER")
+ring:SetAtlas(GLOW_ATLAS)
+ring:SetBlendMode("ADD")
+ring:SetDesaturated(true)
 
 local fade = flash:CreateAnimationGroup()
 local fadeIn = fade:CreateAnimation("Alpha")
@@ -40,8 +44,10 @@ fadeOut:SetDuration(0.8)
 fadeOut:SetOrder(2)
 fade:SetScript("OnFinished", function() flash:Hide() end)
 
+-- Sized on every flash, so a minimap another addon resized still gets the ring on its edge.
 function ns.Flash(r, g, b)
   if not r then r, g, b = NORMAL_FONT_COLOR:GetRGB() end
+  ring:SetSize(Minimap:GetWidth() * GLOW_SCALE, Minimap:GetHeight() * GLOW_SCALE)
   ring:SetVertexColor(r, g, b)
   flash:Show()
   fade:Restart()
