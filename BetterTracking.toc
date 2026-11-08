@@ -29,3 +29,4 @@ Core\GatherMate.lua
 Core\Swap.lua
 UI\Options.lua
 UI\Launcher.lua
+UI\Welcome.lua

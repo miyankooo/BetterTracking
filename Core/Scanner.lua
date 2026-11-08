@@ -262,11 +262,3 @@ ns.OnZoning(function()
   ns.RebuildGeometry()
   ReadTrackingOn()
 end)
-
--- One line, once per account, because the minimap source cannot start until the player hovers a blip.
-ns.OnSettingsLoaded(function()
-  if ns.db.hinted or ns.db.space or not ns.db.blips then return end
-
-  ns.db.hinted = true
-  ns.Print(ns.HOVER_HINT .. " Type /tra for the settings.")
-end)

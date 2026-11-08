@@ -30,9 +30,8 @@ ns.defaults = {
   swap = false,
   swapInterval = 4,
 
-  -- State without a settings control, so the panel's Defaults button leaves it alone.
+  -- State without a settings control, so the page's Defaults button leaves it alone.
   paused = false,
-  hinted = false,
   minimap = { hide = false },
 }
 
@@ -72,8 +71,10 @@ function ns.IsMoving()
   return ns.CanAccess(speed) and speed ~= 0
 end
 
--- Table defaults are copied, so a saved table never aliases the defaults it was filled from.
+-- Table defaults are copied, so a saved table never aliases the defaults it was filled from. An absent table is
+-- the account's first load, which the welcome line waits for.
 local function LoadSettings()
+  ns.firstRun = BetterTrackingDB == nil
   BetterTrackingDB = BetterTrackingDB or {}
   for key, value in pairs(ns.defaults) do
     if BetterTrackingDB[key] == nil then

@@ -197,7 +197,7 @@ _G.NORMAL_FONT_COLOR = {
 }
 _G.RED_FONT_COLOR = { WrapTextInColorCode = function(_, text) return text end }
 _G.GRAY_FONT_COLOR = { GetRGB = function() return 0.5, 0.5, 0.5 end }
-_G.SETTINGS_DEFAULTS = "Defaults"
+_G.SETTINGS_DEFAULTS, _G.SETTINGS = "Defaults", "Settings"
 _G.GameFontNormal, _G.GameFontHighlight, _G.GameFontDisable = { "GameFontNormal" }, { "GameFontHighlight" },
   { "GameFontDisable" }
 _G.C_AddOns = { GetAddOnMetadata = function(name, field) return name == "BetterTracking" and field == "Title" and "Better Tracking" end }
@@ -516,6 +516,22 @@ _G.MinimalSliderWithSteppersMixin = { Label = { Left = 1, Right = 2, Top = 3, Mi
   Event = { OnValueChanged = "OnValueChanged" } }
 _G.SettingsCheckboxMixin = { Event = { OnValueChanged = "OnValueChanged" } }
 _G.GameTooltip, _G.SettingsTooltip = Stub(), Stub()
+
+-- Blizzard's link helpers, and the EventRegistry event every addon link click reaches, owner first.
+_G.LinkTypes = { AddOn = "addon" }
+_G.LinkUtil = {
+  FormatLink = function(linkType, text, ...) return "|H" .. table.concat({ linkType, ... }, ":") .. "|h" .. text .. "|h" end,
+}
+local registry = {}
+_G.EventRegistry = {
+  RegisterCallback = function(_, event, callback, owner)
+    registry[event] = registry[event] or {}
+    table.insert(registry[event], { callback = callback, owner = owner })
+  end,
+}
+local function ClickLink(link)
+  for _, entry in ipairs(registry.SetItemRef or {}) do entry.callback(entry.owner, link, "[Settings]", "LeftButton") end
+end
 _G.SlashCmdList = {}
 
 local tooltipLines = {}
@@ -702,7 +718,27 @@ Check("the scanner always runs and registers the vignette event", scanner ~= nil
 
 print("first run")
 local HINT = "Turn on Find Herbs or Find Minerals, then hover a blip"
-Check("the first load prints one hint", Said(HINT) == 1, Said(HINT) .. " hints")
+local WELCOME = "Pings when a new node, rare or treasure shows up on the minimap"
+Check("the first load prints nothing", #chat == 0, chat[1])
+Login()
+Check("login prints exactly one welcome line", #chat == 1 and Said(WELCOME) == 1, chat[1])
+Check("with the gold settings link and the alias", chat[1]:find("Open the |cnGOLD|Haddon:BetterTracking|h[Settings]|h|r or type /tra ",
+  1, true) ~= nil, chat[1])
+Check("and what minimap pings need", chat[1]:find("hover a blip near the minimap edge.", 1, true) ~= nil, chat[1])
+ClickLink("addon:OtherAddon")
+local secretGuarded = false
+local plainIsSecret = _G.issecretvalue
+_G.issecretvalue = function(value)
+  secretGuarded = secretGuarded or value == SECRET
+  return plainIsSecret(value)
+end
+ClickLink(SECRET)
+_G.issecretvalue = plainIsSecret
+Check("another addon's link or a secret one opens nothing", settingsPage.opened == nil)
+Check("a secret link is checked before any comparison", secretGuarded)
+ClickLink("addon:BetterTracking")
+Check("a click on the link opens the settings", settingsPage.opened == 42)
+settingsPage.opened = nil
 
 print("calibration")
 Check("idle until a coordinate space is known", ns.db.space == false)
@@ -1068,14 +1104,12 @@ player.x, player.y = 0, 0
 ns.db.blips = false
 
 print("settings panel")
-local built, buildError = pcall(Login)
-Check("the canvas page registers at login", built and settingsPage.registered and settingsPage.title == "Better Tracking",
-  buildError)
+Check("the canvas page registers at login", settingsPage.registered and settingsPage.title == "Better Tracking")
 Check("it starts hidden, so the Settings window's first show reaches every control", not settingsPage.frame.shown)
 OpenPage()
 
 -- These keys are state, not preferences, so the page's Defaults button must never reach them.
-local STATE_KEYS = { space = true, paused = true, hinted = true, minimap = true }
+local STATE_KEYS = { space = true, paused = true, minimap = true }
 
 local bound, labels = {}, {}
 for _, row in ipairs(PageRows()) do
@@ -1494,14 +1528,14 @@ ns.db.swap = false
 print("without gathermate2")
 loaded.GatherMate2, _G.LibStub, hooks = nil, nil, {}
 ns.db.space = false
-local hintsBefore = Said(HINT)
+local linesBefore = #chat
 local bare = LoadAddon()
-Check("a later load prints no second hint", Said(HINT) == hintsBefore, (Said(HINT) - hintsBefore) .. " new hints")
 bare.db.space = "center"
 Check("the GatherMate2 source stays detached", not bare.gatherMateReady and hooks.addMiniPin == nil)
 Check("it offers no node types", #bare.GatherMateTypes() == 0)
 bare.db.blips = true
 Check("the page still builds", pcall(Login))
+Check("a later load and login print no welcome", #chat == linesBefore, chat[#chat])
 Check("without an empty node types row", Row("Node Types") == nil and Row("Also Ping at Spots GatherMate2 Remembers"))
 Check("the GatherMate2 row is greyed", IsGreyed("Also Ping at Spots GatherMate2 Remembers"))
 Check("and its tooltip says why", RowTooltip("Also Ping at Spots GatherMate2 Remembers"):find("Needs GatherMate2", 1, true) ~= nil)
