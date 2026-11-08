@@ -331,6 +331,29 @@ templates.WowStyle1DropdownTemplate = function(dropdown)
   end
 end
 
+-- HelpTipTemplateMixin as far as the tip uses it: the frame starts hidden, Init keeps acknowledged and only Reset
+-- clears it, and a hide runs Close, which reports a tip still marked acknowledged (HelpTip.lua:405-431, 495, 670-716).
+templates.HelpTipTemplate = function(tip)
+  -- The addon reads tip.info for whether the tip is up, so a missing info reads nil, never a stub.
+  setmetatable(tip, { __index = function(_, key) if key ~= "info" then return Stub() end end })
+  tip.shown, tip.acknowledged, tip.inits = false, false, 0
+  function tip:Reset() self.info, self.acknowledged = nil, false end
+  function tip:Init(_, info) self.info, self.inits = info, self.inits + 1 end
+  function tip:Close()
+    local info = rawget(self, "info")
+    if info then
+      self.info = nil
+      if self.acknowledged then info.onAcknowledgeCallback() end
+    end
+    self.shown = false
+  end
+  function tip:Acknowledge()
+    self.acknowledged = true
+    self:Close()
+  end
+  tip:SetScript("OnHide", tip.Close)
+end
+
 -- Like Blizzard's, a new value reaches OnValueChanged through the bar's own script.
 templates.MinimalSliderWithSteppersTemplate = function(slider)
   AddCallbacks(slider)
@@ -515,6 +538,7 @@ _G.EventUtil = {
 _G.MinimalSliderWithSteppersMixin = { Label = { Left = 1, Right = 2, Top = 3, Min = 4, Max = 5 },
   Event = { OnValueChanged = "OnValueChanged" } }
 _G.SettingsCheckboxMixin = { Event = { OnValueChanged = "OnValueChanged" } }
+_G.HelpTip = { width = 226, ButtonStyle = { Close = 2 }, Point = { RightEdgeCenter = 8 } }
 _G.GameTooltip, _G.SettingsTooltip = Stub(), Stub()
 
 -- Blizzard's link helpers, and the EventRegistry event every addon link click reaches, owner first.
@@ -1102,6 +1126,53 @@ Check("a zone change forgets the shared memory too", #alerts == 2, #alerts .. " 
 world = allNodes
 player.x, player.y = 0, 0
 ns.db.blips = false
+
+print("help tip")
+local function SwapTip()
+  for _, frame in ipairs(frames) do
+    if frame.template == "HelpTipTemplate" and frame.parent == Control("Swap Herbs and Minerals") then return frame end
+  end
+end
+local function TipShown()
+  local tip = SwapTip()
+  return tip ~= nil and tip.shown and rawget(tip, "info") ~= nil
+end
+
+Check("no tip before the page shows", SwapTip() == nil)
+OpenPage()
+local tip = SwapTip()
+Check("the first show of the page shows the tip at the swap checkbox", TipShown()
+  and tip.info.text == "Turn on Swap Herbs and Minerals to see herb and ore nodes on the minimap at once."
+  and tip.info.buttonStyle == HelpTip.ButtonStyle.Close and tip.info.targetPoint == HelpTip.Point.RightEdgeCenter)
+OpenPage()
+ns.ReplayTip()
+Check("a refresh or a replay while it is up does not show it twice", tip.inits == 1, tip.inits)
+ClosePage()
+Check("it hides with the page without being marked", not TipShown() and ns.db.tipSeen == nil)
+OpenPage()
+Check("and shows again at the page's next show", TipShown() and tip.inits == 2)
+tip:Acknowledge()
+Check("its close button retires it for the account", not TipShown() and ns.db.tipSeen == true)
+ClosePage()
+OpenPage()
+Check("so the next show has no tip", not TipShown())
+
+ns.ReplayTip()
+Check("a replay brings it back at once on the open page", TipShown() and ns.db.tipSeen == nil)
+ClosePage()
+Check("and a tip closed once before still hides unmarked", ns.db.tipSeen == nil)
+OpenPage()
+Control("Swap Herbs and Minerals"):Click()
+Check("turning on the swap is the feature in use and retires it", not TipShown() and ns.db.tipSeen == true)
+Control("Swap Herbs and Minerals"):Click()
+ns.db.tipSeen = nil
+ClosePage()
+SlashCmdList.BETTERTRACKING("swap")
+Check("so does turning it on by command while the page is closed", ns.db.tipSeen == true)
+SlashCmdList.BETTERTRACKING("swap")
+OpenPage()
+Check("and the page shows no tip then", not TipShown())
+ClosePage()
 
 print("settings panel")
 Check("the canvas page registers at login", settingsPage.registered and settingsPage.title == "Better Tracking")

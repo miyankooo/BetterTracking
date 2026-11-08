@@ -11,6 +11,7 @@ local DROPDOWN_WIDTH = 220
 local SLIDER_WIDTH, SLIDER_Y = 250, 3
 
 local NEEDS_GATHERMATE = "Needs GatherMate2 installed and enabled."
+local TIP_TEXT = "Turn on Swap Herbs and Minerals to see herb and ore nodes on the minimap at once."
 
 local INTRO = "Swaps Find Herbs and Find Minerals while you move, so the minimap shows both, and pings once for "
   .. "each new node, rare or treasure that shows up on it. Each swap costs a global cooldown.\n\n"
@@ -20,6 +21,7 @@ local INTRO = "Swaps Find Herbs and Find Minerals while you move, so the minimap
 -- Every row with its saved key, control and refresh, in page order. Defaults restores exactly these keys, so the
 -- calibration, the pause and the minimap button position stay as they are.
 local rows = {}
+local swapCheckbox, showSwapTip, retireSwapTip
 
 -- Text in a font role: GameFontNormal (heading, gold), GameFontHighlight (body, white), GameFontDisable (muted,
 -- grey), GameFontNormalLarge (title, 16 px, a dialog's subject line only).
@@ -124,6 +126,41 @@ function ns.OpenSettings()
     return
   end
   Settings.OpenToCategory(categoryID)
+end
+
+-- Blizzard's yellow help tip, as an own HelpTipTemplate frame on its target, never HelpTip:Show, whose shared pool
+-- would carry addon taint into the tips Blizzard shows later. It shows each time the target shows until the player
+-- closes it or uses the feature, then never again on the account, and hides with its target without being marked.
+-- Init leaves acknowledged set and only Blizzard's pool resets a tip (Blizzard_SharedXML/HelpTip.lua:419-431, 495,
+-- 687), so Reset runs before every Init, or a tip closed once and brought back by /tra intro would count as seen
+-- when it merely hides with its target.
+local function AttachTip(target, text, targetPoint, relativeRegion)
+  local tip
+  local info = {
+    text = text,
+    buttonStyle = HelpTip.ButtonStyle.Close,
+    targetPoint = targetPoint,
+    onAcknowledgeCallback = function() ns.db.tipSeen = true end,
+  }
+  local function ShowTip()
+    if ns.db.tipSeen or (tip and tip:IsShown()) then return end
+    if not tip then
+      tip = CreateFrame("Frame", nil, target, "HelpTipTemplate")
+      tip.width = HelpTip.width
+      tip:SetWidth(tip.width)
+    end
+    tip:Reset()
+    tip:Init(target, info, relativeRegion or target)
+    tip:Show()
+  end
+  target:HookScript("OnShow", ShowTip)
+  if target:IsVisible() then ShowTip() end
+
+  -- The player used the feature: the tip goes for good, shown or not.
+  local function Retire()
+    if tip and tip.info then tip:Acknowledge() else ns.db.tipSeen = true end
+  end
+  return ShowTip, Retire
 end
 
 local function HelpTooltip(label, help, errorText)
@@ -234,15 +271,23 @@ local function IsOn(key)
 end
 
 local function BuildSwapRows(panel)
-  AddCheckboxRow(panel, {
+  swapCheckbox = AddCheckboxRow(panel, {
     key = "swap",
     label = "Swap Herbs and Minerals",
     help = "Casts Find Herbs and Find Minerals in turn while you move, so the minimap shows both and each new node"
       .. " pings. Each swap costs a global cooldown. It waits in combat, while dead, on a flight, in an instance,"
       .. " in a town or inn, while standing still, casting or looting, while an enemy is targeted or under the"
       .. " cursor and while another tracking is on. Middle-click the minimap button to turn it on or off.",
-    onChange = ns.ApplySwap,
+    onChange = function(checked)
+      ns.ApplySwap()
+      if checked then retireSwapTip() end
+    end,
   })
+
+  -- The tip points right, where the row has room, at the first thing a new player turns on. A swap that is already
+  -- on is the feature in use.
+  showSwapTip, retireSwapTip = AttachTip(swapCheckbox, TIP_TEXT, HelpTip.Point.RightEdgeCenter)
+  if ns.db.swap then retireSwapTip() end
 
   AddDropdownRow(panel, {
     key = "swapInterval",
@@ -371,19 +416,29 @@ local page
 -- a swap turned on or off by /tra swap or the minimap button.
 EventUtil.ContinueOnPlayerLogin(function()
   page = BuildPanel(INTRO, RestoreDefaults)
+  page:Hide()
   BuildSwapRows(page)
   BuildAlertRows(page)
   BuildBlipRows(page)
   BuildGatherMateRows(page)
   page.OnRefresh = Refresh
   Refresh()
-  page:Hide()
   RegisterPanel(page)
 end)
 
--- A page open beside the minimap button follows a swap toggle at once.
+-- A page open beside the minimap button follows a swap toggle at once, and a swap turned on by /tra swap or the
+-- minimap button is the feature the tip points at in use.
 function ns.SwapChanged()
+  if ns.db.swap then
+    if retireSwapTip then retireSwapTip() else ns.db.tipSeen = true end
+  end
   if page and page:IsVisible() then Refresh() end
+end
+
+-- /tra intro brings the tip back: now, if the swap row is on screen, else at its next show.
+function ns.ReplayTip()
+  ns.db.tipSeen = nil
+  if swapCheckbox and swapCheckbox:IsVisible() then showSwapTip() end
 end
 
 local function ForgetNodes()
