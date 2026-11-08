@@ -8,6 +8,9 @@ local print = print
 local chat = {}
 _G.print = function(line) chat[#chat + 1] = line end
 
+-- The gold title of every chat line, as the NORMAL_FONT_COLOR stub marks it, then the uncoloured colon.
+local PREFIX = "|cnGOLD[Better Tracking]|r: "
+
 local function Said(text)
   local count = 0
   for _, line in ipairs(chat) do
@@ -181,9 +184,13 @@ _G.tContains = function(list, value)
   end
   return false
 end
-_G.NORMAL_FONT_COLOR = { GetRGB = function() return 1, 0.82, 0 end }
+-- The gold wrap is kept as a marker, so a check can tell the coloured title from the plain message.
+_G.NORMAL_FONT_COLOR = {
+  GetRGB = function() return 1, 0.82, 0 end,
+  WrapTextInColorCode = function(_, text) return "|cnGOLD" .. text .. "|r" end,
+}
 _G.RED_FONT_COLOR = { WrapTextInColorCode = function(_, text) return text end }
-_G.YELLOW_FONT_COLOR = { WrapTextInColorCode = function(_, text) return text end }
+_G.C_AddOns = { GetAddOnMetadata = function(name, field) return name == "BetterTracking" and field == "Title" and "Better Tracking" end }
 
 local frames = {}
 _G.CreateFrame = function()
@@ -1090,16 +1097,16 @@ ns.db.space = "center"
 
 inCombat = true
 ClickLauncher("LeftButton")
-Check("a left click in combat waits", not panel.opened and chat[#chat] == "[Better Tracking]: Opens after combat.", chat[#chat])
+Check("a left click in combat waits", not panel.opened and chat[#chat] == PREFIX .. "Opens after combat.", chat[#chat])
 inCombat = false
 Fire("PLAYER_REGEN_ENABLED")
 Check("and opens the category once combat ends", panel.opened)
 
 SlashCmdList.BETTERTRACKING("minimap")
 Check("/tra minimap hides the button and says how to bring it back", not icons["Better Tracking"].shown and ns.db.minimap.hide
-  and chat[#chat] == "[Better Tracking]: Minimap button hidden. Type /tra minimap to show it again.", chat[#chat])
+  and chat[#chat] == PREFIX .. "Minimap button hidden. Type /tra minimap to show it again.", chat[#chat])
 SlashCmdList.BETTERTRACKING("minimap")
-Check("and shows it again", icons["Better Tracking"].shown and chat[#chat] == "[Better Tracking]: Minimap button shown.", chat[#chat])
+Check("and shows it again", icons["Better Tracking"].shown and chat[#chat] == PREFIX .. "Minimap button shown.", chat[#chat])
 
 print("herb and ore swap")
 local function Advance(seconds) Tick(math.floor(seconds * 60 + 0.5)) end
@@ -1132,7 +1139,7 @@ Check("the swap starts off", ns.db.swap == false and LiveTickers() == 0 and Tool
 local notifiedBefore = Setting("swap").notified
 SlashCmdList.BETTERTRACKING("swap")
 Check("/tra swap turns it on with one line", ns.db.swap and LiveTickers() == 1
-  and chat[#chat] == "[Better Tracking]: Herb and ore swap on.", chat[#chat])
+  and chat[#chat] == PREFIX .. "Herb and ore swap on.", chat[#chat])
 Check("and tells an open settings panel", Setting("swap").notified == notifiedBefore + 1)
 
 Advance(1)
@@ -1211,11 +1218,11 @@ player.speed = 7
 
 SlashCmdList.BETTERTRACKING("swap")
 Check("/tra swap turns it off with one line", not ns.db.swap and LiveTickers() == 0
-  and chat[#chat] == "[Better Tracking]: Herb and ore swap off.", chat[#chat])
+  and chat[#chat] == PREFIX .. "Herb and ore swap off.", chat[#chat])
 tracking[2].spellID = 99999
 ClickLauncher("MiddleButton")
 Check("a middle click turns it on and says when a spell is missing", ns.db.swap and LiveTickers() == 1
-  and chat[#chat] == "[Better Tracking]: Herb and ore swap needs Find Herbs and Find Minerals.", chat[#chat])
+  and chat[#chat] == PREFIX .. "Herb and ore swap needs Find Herbs and Find Minerals.", chat[#chat])
 tracking[2].spellID = 2580
 ClickLauncher("MiddleButton")
 Check("a second middle click turns it off", not ns.db.swap and LiveTickers() == 0)
@@ -1324,7 +1331,7 @@ Check("the timed block line came once, without the Ignore hint", Said("Blizzard 
 SlashCmdList.BETTERTRACKING("swap")
 SlashCmdList.BETTERTRACKING("swap")
 Check("turning it on again says it stays off", chat[#chat]
-  == "[Better Tracking]: Herb and ore swap stays off until you type /reload, because Blizzard blocks it.", chat[#chat])
+  == PREFIX .. "Herb and ore swap stays off until you type /reload, because Blizzard blocks it.", chat[#chat])
 blockEvent = "ADDON_ACTION_BLOCKED"
 blockTimed, blockAll = false, false
 ns.db.swap = false
@@ -1389,6 +1396,14 @@ Check("status raises no error", pcall(SlashCmdList.BETTERTRACKING, "status"))
 Check("types raises no error", pcall(SlashCmdList.BETTERTRACKING, "types"))
 Check("calibrate raises no error", pcall(SlashCmdList.BETTERTRACKING, "calibrate"))
 Check("/bettertracking is the long command", SLASH_BETTERTRACKING1 == "/bettertracking" and SLASH_BETTERTRACKING2 == "/tra")
+
+print("chat lines")
+local unprefixed = {}
+for _, line in ipairs(chat) do
+  if line:sub(1, #PREFIX) ~= PREFIX then unprefixed[#unprefixed + 1] = line end
+end
+Check("every chat line starts with the gold title and a plain colon", #chat > 0 and #unprefixed == 0,
+  table.concat(unprefixed, " | "))
 
 print(failures == 0 and "\nall checks passed" or ("\n" .. failures .. " failing checks"))
 os.exit(failures == 0 and 0 or 1)

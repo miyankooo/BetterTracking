@@ -1,7 +1,7 @@
 local addonName, ns = ...
 
 ns.addonName = addonName
-ns.title = "Better Tracking"
+ns.title = C_AddOns.GetAddOnMetadata(addonName, "Title")
 
 -- Defaults are tuned for gathering: a cooldown long enough that riding into a cluster of nodes is one ping,
 -- and only gathering blips. The GatherMate2 source is opt-in, because its circles mark remembered spots,
@@ -46,8 +46,9 @@ function ns.OnSettingsLoaded(callback)
   loadedCallbacks[#loadedCallbacks + 1] = callback
 end
 
+-- Every chat line of the set reads [Title]: Sentence., with only the bracketed title in Blizzard's gold.
 function ns.Print(message)
-  print(YELLOW_FONT_COLOR:WrapTextInColorCode("[" .. ns.title .. "]:") .. " " .. message)
+  print(NORMAL_FONT_COLOR:WrapTextInColorCode("[" .. ns.title .. "]") .. ": " .. message)
 end
 
 -- issecretvalue does not take nil (Nilable = false), which is never secret.
