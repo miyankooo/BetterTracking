@@ -172,7 +172,13 @@ _G.SOUNDKIT = {
 _G.Enum = { TooltipDataType = { Item = 0, Spell = 1, Unit = 2, Corpse = 3, Object = 4, MinimapMouseover = 21 } }
 _G.issecretvalue = function(value) return value == SECRET end
 local lastChannel
+local UI_SOUNDS = { [SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON] = true, [SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF] = true }
+local uiSounds = 0
 _G.PlaySound = function(id, channel)
+  if UI_SOUNDS[id] then
+    uiSounds = uiSounds + 1
+    return
+  end
   alerts[#alerts + 1] = id
   lastChannel = channel
 end
@@ -190,17 +196,153 @@ _G.NORMAL_FONT_COLOR = {
   WrapTextInColorCode = function(_, text) return "|cnGOLD" .. text .. "|r" end,
 }
 _G.RED_FONT_COLOR = { WrapTextInColorCode = function(_, text) return text end }
+_G.GRAY_FONT_COLOR = { GetRGB = function() return 0.5, 0.5, 0.5 end }
+_G.SETTINGS_DEFAULTS = "Defaults"
+_G.GameFontNormal, _G.GameFontHighlight, _G.GameFontDisable = { "GameFontNormal" }, { "GameFontHighlight" },
+  { "GameFontDisable" }
 _G.C_AddOns = { GetAddOnMetadata = function(name, field) return name == "BetterTracking" and field == "Title" and "Better Tracking" end }
 
+-- Frames keep their template, parent, children, font strings and scripts, so the settings page can be driven
+-- through its own controls and the help tip through its target's OnShow.
 local frames = {}
-_G.CreateFrame = function()
-  local frame = setmetatable({ events = {}, scripts = {} }, stubMeta)
+local templates = {}
+
+local function NewFontString()
+  local text = setmetatable({ points = {} }, stubMeta)
+  function text:SetText(value) self.text = value end
+  function text:GetText() return self.text end
+  function text:SetFontObject(font) self.font = font end
+  function text:SetTextColor(r, g, b) self.color = { r, g, b } end
+  function text:SetPoint(point, ...) self.points[point] = { ... } end
+  return text
+end
+
+_G.CreateFrame = function(_, _, parent, template)
+  local frame = setmetatable({ events = {}, scripts = {}, hooks = {}, children = {}, texts = {}, parent = parent,
+    template = template, enabled = true, shown = true }, stubMeta)
   function frame:RegisterEvent(event) self.events[event] = true end
   function frame:RegisterUnitEvent(event) self.events[event] = true end
   function frame:UnregisterEvent(event) self.events[event] = nil end
   function frame:SetScript(kind, handler) self.scripts[kind] = handler end
+  function frame:HookScript(kind, handler)
+    self.hooks[kind] = self.hooks[kind] or {}
+    table.insert(self.hooks[kind], handler)
+  end
+  function frame:CreateFontString()
+    local text = NewFontString()
+    self.texts[#self.texts + 1] = text
+    return text
+  end
+  function frame:SetText(value) self.text = value end
+  function frame:SetEnabled(enabled) self.enabled = enabled and true or false end
+  function frame:IsEnabled() return self.enabled end
+  function frame:Show() self.shown = true end
+  function frame:Hide() self.shown = false end
+  function frame:IsShown() return self.shown end
+  function frame:IsVisible()
+    if not self.shown then return false end
+    local owner = rawget(self, "parent")
+    if type(owner) == "table" and rawget(owner, "children") then return owner:IsVisible() end
+    return true
+  end
+  if type(parent) == "table" and rawget(parent, "children") then parent.children[#parent.children + 1] = frame end
   frames[#frames + 1] = frame
+  if templates[template] then templates[template](frame) end
   return frame
+end
+
+local function RunScript(frame, kind, ...)
+  if frame.scripts[kind] then frame.scripts[kind](frame, ...) end
+  for _, hook in ipairs(frame.hooks[kind] or {}) do hook(frame, ...) end
+end
+
+-- The client fires OnShow and OnHide down the tree, on every child that is shown itself.
+local function ShowTree(frame)
+  RunScript(frame, "OnShow")
+  for _, child in ipairs(frame.children) do
+    if child.shown then ShowTree(child) end
+  end
+end
+
+local function HideTree(frame)
+  RunScript(frame, "OnHide")
+  for _, child in ipairs(frame.children) do
+    if child.shown then HideTree(child) end
+  end
+end
+
+-- Blizzard's CallbackRegistryMixin hands each callback its owner first.
+local function AddCallbacks(frame)
+  frame.callbacks = {}
+  function frame:RegisterCallback(event, callback, owner)
+    self.callbacks[#self.callbacks + 1] = { event = event, callback = callback, owner = owner }
+  end
+  function frame:TriggerEvent(event, ...)
+    for _, entry in ipairs(self.callbacks) do
+      if entry.event == event then entry.callback(entry.owner, ...) end
+    end
+  end
+end
+
+-- SettingsCheckboxMixin:Init wires OnClick to OnValueChanged. A disabled box takes no click.
+templates.SettingsCheckboxTemplate = function(checkbox)
+  AddCallbacks(checkbox)
+  function checkbox:Init(value, tooltip) self.checked, self.tooltip = value, tooltip end
+  function checkbox:SetValue(value) self.checked = value end
+  function checkbox:Click()
+    if not self.enabled then return end
+    self.checked = not self.checked
+    self:TriggerEvent("OnValueChanged", self.checked)
+  end
+end
+
+-- The menu runs its generator against a fake root description, and a pick calls the entry's setter, as a click
+-- in the open menu does. Text follows DropdownSelectionTextMixin: the selection function first, else the names.
+templates.WowStyle1DropdownTemplate = function(dropdown)
+  function dropdown:SetupMenu(generator) self.generator = generator end
+  function dropdown:SetSelectionText(selectionText) self.selectionText = selectionText end
+  function dropdown:GenerateMenu() self.generated = (rawget(self, "generated") or 0) + 1 end
+  function dropdown:Entries()
+    local entries = {}
+    local function Add(kind)
+      return function(_, text, isSelected, setSelected)
+        entries[#entries + 1] = { kind = kind, text = text, isSelected = isSelected, setSelected = setSelected }
+      end
+    end
+    self.generator(self, { CreateRadio = Add("radio"), CreateCheckbox = Add("checkbox") })
+    return entries
+  end
+  function dropdown:Pick(text)
+    for _, entry in ipairs(self:Entries()) do
+      if entry.text == text then return entry.setSelected() end
+    end
+    error("no menu entry " .. text)
+  end
+  function dropdown:Text()
+    local selections, names = {}, {}
+    for _, entry in ipairs(self:Entries()) do
+      if entry.isSelected() then
+        selections[#selections + 1] = entry
+        names[#names + 1] = entry.text
+      end
+    end
+    local selectionText = rawget(self, "selectionText")
+    return selectionText and selectionText(selections) or table.concat(names, ", ")
+  end
+end
+
+-- Like Blizzard's, a new value reaches OnValueChanged through the bar's own script.
+templates.MinimalSliderWithSteppersTemplate = function(slider)
+  AddCallbacks(slider)
+  slider.Slider = CreateFrame("Slider", nil, slider)
+  function slider:Init(value, minimum, maximum, steps, formatters)
+    self.value, self.minimum, self.maximum, self.steps, self.formatters = value, minimum, maximum, steps, formatters
+  end
+  function slider:SetValue(value)
+    if value == self.value then return end
+    self.value = value
+    self:TriggerEvent("OnValueChanged", value)
+  end
 end
 
 _G.Minimap = {
@@ -355,8 +497,9 @@ local STUBBED = {
 }
 
 local addonCallbacks = {}
+local loginCallbacks = {}
 _G.EventUtil = {
-  ContinueOnPlayerLogin = function(fn) _G.deferredLogin = fn end,
+  ContinueOnPlayerLogin = function(fn) loginCallbacks[#loginCallbacks + 1] = fn end,
   ContinueOnAddOnLoaded = function(name, fn)
     if loaded[name] then fn() else addonCallbacks[name] = fn end
   end,
@@ -369,115 +512,29 @@ _G.EventUtil = {
     end)
   end,
 }
-_G.MinimalSliderWithSteppersMixin = { Label = { Left = 1, Right = 2, Top = 3, Min = 4, Max = 5 } }
-_G.GameTooltip = Stub()
+_G.MinimalSliderWithSteppersMixin = { Label = { Left = 1, Right = 2, Top = 3, Min = 4, Max = 5 },
+  Event = { OnValueChanged = "OnValueChanged" } }
+_G.SettingsCheckboxMixin = { Event = { OnValueChanged = "OnValueChanged" } }
+_G.GameTooltip, _G.SettingsTooltip = Stub(), Stub()
 _G.SlashCmdList = {}
 
 local tooltipLines = {}
 local function TooltipLine(_, text) tooltipLines[#tooltipLines + 1] = text end
 _G.GameTooltip_SetTitle, _G.GameTooltip_AddHighlightLine, _G.GameTooltip_AddInstructionLine =
   TooltipLine, TooltipLine, TooltipLine
-_G.GameTooltip_AddNormalLine = TooltipLine
+_G.GameTooltip_AddNormalLine, _G.GameTooltip_AddErrorLine = TooltipLine, TooltipLine
 
--- A fake of Blizzard's Settings API that keeps the rules the panel leans on: a proxy setter runs only when
--- the value changes (SettingMixin:ApplyValue), a default must match its declared type, a checkbox needs a
--- boolean and a slider a number, and a button needs an explicit addSearchTags.
-local panel
-
-local function NewInitializer(kind, data)
-  local initializer = { kind = kind, data = data, predicates = {} }
-
-  function initializer:SetParentInitializer(parent, predicate)
-    self.parent = parent
-    if predicate then self.predicates[#self.predicates + 1] = predicate end
-  end
-
-  function initializer:AddModifyPredicate(predicate)
-    self.predicates[#self.predicates + 1] = predicate
-  end
-
-  function initializer:IsEnabled()
-    for _, predicate in ipairs(self.predicates) do
-      if not predicate() then return false end
-    end
-    return true
-  end
-
-  return initializer
-end
-
-local function AddRow(kind, data)
-  local row = NewInitializer(kind, data)
-  panel.rows[#panel.rows + 1] = row
-  return row
-end
-
-local function ProxySetting(_, variable, varType, name, default, get, set)
-  assert(type(name) == "string", variable .. " needs a string name")
-  assert(type(default) == varType, variable .. " has a " .. type(default) .. " default for a " .. varType)
-
-  local setting = { variable = variable, name = name, notified = 0 }
-  function setting:GetValue() return get() end
-  function setting:GetVariableType() return varType end
-  function setting:NotifyUpdate() self.notified = self.notified + 1 end
-  function setting:SetValueToDefault() self:SetValue(default) end
-  function setting:SetValue(value)
-    if get() == value then return end
-    assert(type(value) == varType, variable .. " takes a " .. varType)
-    set(value)
-  end
-
-  panel.settings[variable] = setting
-  return setting
-end
-
+-- Blizzard's Settings API for a canvas page. The settings list calls are left out, so a page built as a list
+-- fails to load here.
+local settingsPage = {}
 _G.Settings = {
-  RegisterVerticalLayoutCategory = function(name)
-    panel.title = name
-    local layout = { AddInitializer = function(_, row) panel.rows[#panel.rows + 1] = row end }
-    return { GetID = function() return 1 end }, layout
+  RegisterCanvasLayoutCategory = function(frame, name)
+    settingsPage.frame, settingsPage.title = frame, name
+    return { GetID = function() return 42 end }
   end,
-  RegisterProxySetting = ProxySetting,
-  CreateCheckbox = function(_, setting, tooltip)
-    assert(setting:GetVariableType() == "boolean", setting.variable .. " is not a boolean")
-    return AddRow("checkbox", { setting = setting, tooltip = tooltip })
-  end,
-  CreateSlider = function(_, setting, options, tooltip)
-    assert(setting:GetVariableType() == "number" and options, setting.variable .. " is not a number slider")
-    return AddRow("slider", { setting = setting, options = options, tooltip = tooltip })
-  end,
-  CreateDropdown = function(_, setting, options, tooltip)
-    assert(options, setting.variable .. " has no options")
-    return AddRow("dropdown", { setting = setting, options = options, tooltip = tooltip })
-  end,
-  CreateSliderOptions = function(minValue, maxValue, rate)
-    local options = { minValue = minValue, maxValue = maxValue, steps = (maxValue - minValue) / rate }
-    function options:SetLabelFormatter(_, format) self.format = format end
-    return options
-  end,
-  CreateControlTextContainer = function()
-    local container = { data = {} }
-    function container:Add(value, label) self.data[#self.data + 1] = { value = value, label = label } end
-    function container:AddCheckbox(value, label) self.data[#self.data + 1] = { value = value, label = label } end
-    function container:GetData() return self.data end
-    return container
-  end,
-  NotifyUpdate = function(variable)
-    local setting = panel.settings[variable]
-    if setting then setting:NotifyUpdate() end
-  end,
-  RegisterAddOnCategory = function() panel.registered = true end,
-  OpenToCategory = function() panel.opened = true end,
+  RegisterAddOnCategory = function() settingsPage.registered = true end,
+  OpenToCategory = function(categoryID) settingsPage.opened = categoryID end,
 }
-
-_G.CreateSettingsListSectionHeaderInitializer = function(name, tooltip)
-  return NewInitializer("header", { name = name, tooltip = tooltip })
-end
-
-_G.CreateSettingsButtonInitializer = function(name, buttonText, buttonClick, tooltip, addSearchTags)
-  assert(addSearchTags ~= nil, name .. " has no addSearchTags")
-  return NewInitializer("button", { name = name, buttonText = buttonText, buttonClick = buttonClick, tooltip = tooltip })
-end
 
 -- Reads the file list from the toc, so the harness loads exactly what the client loads, in the same order.
 local function TocFiles()
@@ -503,29 +560,91 @@ local function LoadAddon()
   return namespace
 end
 
-local function BuildPanel()
-  panel = { settings = {}, rows = {} }
-  return pcall(_G.deferredLogin)
+-- Runs the login callbacks the loaded files registered, once, as PLAYER_LOGIN does.
+local function Login()
+  local callbacks = loginCallbacks
+  loginCallbacks = {}
+  for _, callback in ipairs(callbacks) do callback() end
 end
 
-local function Row(name)
-  for _, row in ipairs(panel.rows) do
-    local rowName = row.data.setting and row.data.setting.name or row.data.name
-    if rowName == name then return row end
+local CONTROL_TEMPLATES = { SettingsCheckboxTemplate = true, WowStyle1DropdownTemplate = true,
+  MinimalSliderWithSteppersTemplate = true }
+
+-- The rows of the settings page in page order, each with its label and control.
+local function PageRows()
+  local rows = {}
+  for _, frame in ipairs(frames) do
+    if frame.parent == settingsPage.frame and frame.texts[1] then
+      for _, child in ipairs(frame.children) do
+        if CONTROL_TEMPLATES[child.template] then
+          rows[#rows + 1] = { frame = frame, label = frame.texts[1], control = child }
+        end
+      end
+    end
+  end
+  return rows
+end
+
+local function Row(label)
+  for _, row in ipairs(PageRows()) do
+    if row.label.text == label then return row end
   end
 end
 
-local function Setting(key)
-  return panel.settings["BETTER_TRACKING_" .. key:upper()]
+local function Control(label)
+  local row = Row(label)
+  return row and row.control
 end
 
-local function Tooltip(name)
-  local tooltip = Row(name).data.tooltip
-  return type(tooltip) == "function" and tooltip() or tooltip
+-- What a row shows on hover, as one string.
+local function RowTooltip(label)
+  tooltipLines = {}
+  local row = Row(label)
+  row.frame.scripts.OnEnter(row.frame)
+  return table.concat(tooltipLines, " ")
 end
 
-local function RestoreDefaults()
-  for _, setting in pairs(panel.settings) do setting:SetValueToDefault() end
+-- Greyed as Blizzard's rows: a grey label and a control that takes no input. A live row's label is gold.
+local function IsGreyed(label)
+  local row = Row(label)
+  return row.label.color[1] == 0.5 and not row.control.enabled
+end
+
+local function IsLive(label)
+  local row = Row(label)
+  return row.label.color[1] == 1 and row.control.enabled
+end
+
+-- The Settings window shows the page: OnShow down the tree on its first show, then OnRefresh every time
+-- (SettingsPanelMixin:DisplayLayout). Closing the window hides it again.
+local function OpenPage()
+  local frame = settingsPage.frame
+  if not frame.shown then
+    frame.shown = true
+    ShowTree(frame)
+  end
+  frame:OnRefresh()
+end
+
+local function ClosePage()
+  local frame = settingsPage.frame
+  if frame.shown then
+    HideTree(frame)
+    frame.shown = false
+  end
+end
+
+local function IsIndented(label)
+  return Row(label).label.points.LEFT[1] == 37 + 15
+end
+
+local function PressDefaults()
+  for _, frame in ipairs(frames) do
+    if frame.parent == settingsPage.frame and frame.template == "UIPanelButtonTemplate" and frame.text == "Defaults" then
+      return frame.scripts.OnClick(frame)
+    end
+  end
+  error("no Defaults button")
 end
 
 local ns = LoadAddon()
@@ -949,85 +1068,121 @@ player.x, player.y = 0, 0
 ns.db.blips = false
 
 print("settings panel")
-local built, buildError = BuildPanel()
-Check("the vertical layout registers at login", built and panel.registered and panel.title == "Better Tracking", buildError)
+local built, buildError = pcall(Login)
+Check("the canvas page registers at login", built and settingsPage.registered and settingsPage.title == "Better Tracking",
+  buildError)
+Check("it starts hidden, so the Settings window's first show reaches every control", not settingsPage.frame.shown)
+OpenPage()
 
--- These keys are state, not preferences, so the panel's Defaults button must never reach them.
+-- These keys are state, not preferences, so the page's Defaults button must never reach them.
 local STATE_KEYS = { space = true, paused = true, hinted = true, minimap = true }
 
+local bound, labels = {}, {}
+for _, row in ipairs(PageRows()) do
+  bound[row.frame.key] = true
+  labels[#labels + 1] = row.label.text
+end
 local unbound, stateBound = {}, {}
 for key in pairs(ns.defaults) do
-  if STATE_KEYS[key] and Setting(key) then stateBound[#stateBound + 1] = key end
-  if not STATE_KEYS[key] and not Setting(key) then unbound[#unbound + 1] = key end
+  if STATE_KEYS[key] and bound[key] then stateBound[#stateBound + 1] = key end
+  if not STATE_KEYS[key] and not bound[key] then unbound[#unbound + 1] = key end
 end
 table.sort(unbound)
 Check("every saved preference has a control", #unbound == 0, table.concat(unbound, ", "))
 Check("the state keys have none, so Defaults cannot clear them", #stateBound == 0, table.concat(stateBound, ", "))
+Check("the rows run swap, alert, minimap nodes, GatherMate2", table.concat(labels, "|") == "Swap Herbs and Minerals|"
+  .. "Swap Every|Play a Sound|Sound|Flash the Minimap Edge|Cooldown|Alert on Minimap Nodes|Gathering Nodes Only|"
+  .. "Rares and Treasures|Also Ping at Spots GatherMate2 Remembers|Node Types", table.concat(labels, "|"))
 
-local headers = {}
-for _, row in ipairs(panel.rows) do
-  if row.kind == "header" then headers[#headers + 1] = row.data.name end
+local untipped = {}
+for _, row in ipairs(PageRows()) do
+  local control = row.control
+  local slider = rawget(control, "Slider")
+  local controlTip = rawget(control, "tooltip") or control.hooks.OnEnter or (slider and slider.hooks.OnEnter)
+  if not (row.frame.scripts.OnEnter and controlTip) then untipped[#untipped + 1] = row.label.text end
 end
-Check("four sections in order", table.concat(headers, "|") == "Herb and Ore Swap|Alert|Minimap Nodes|GatherMate2",
-  table.concat(headers, "|"))
-Check("the swap interval nests under the swap and offers 2 and 4 seconds", Row("Swap Every").parent == Row("Swap Herbs and Minerals")
-  and #Row("Swap Every").data.options() == 2 and not Row("Swap Every"):IsEnabled())
-Check("the swap tooltip names the global cooldown and the middle click", Tooltip("Swap Herbs and Minerals"):find("global cooldown", 1, true)
-  and Tooltip("Swap Herbs and Minerals"):find("Middle-click", 1, true))
-Setting("swap"):SetValue(true)
-Check("the swap checkbox starts the ticker", LiveTickers() == 1, LiveTickers())
-Setting("swap"):SetValue(false)
-Check("and stops it", LiveTickers() == 0, LiveTickers())
+Check("every row and every control has a tooltip", #untipped == 0, table.concat(untipped, ", "))
 
-Check("the sound dropdown offers all six sounds", #Row("Sound").data.options() == #ns.sounds)
+Check("the swap interval is a dependent row offering 2 and 4 seconds", IsIndented("Swap Every")
+  and #Control("Swap Every"):Entries() == 2 and IsGreyed("Swap Every") and not IsIndented("Swap Herbs and Minerals"))
+Check("the swap tooltip names the global cooldown and the middle click",
+  RowTooltip("Swap Herbs and Minerals"):find("global cooldown", 1, true)
+  and RowTooltip("Swap Herbs and Minerals"):find("Middle-click", 1, true))
+local soundsBefore = uiSounds
+Control("Swap Herbs and Minerals"):Click()
+Check("the swap checkbox starts the ticker", LiveTickers() == 1 and ns.db.swap, LiveTickers())
+Check("with Blizzard's checkbox sound", uiSounds == soundsBefore + 1)
+Check("and wakes its dependent row", IsLive("Swap Every"))
+Control("Swap Every"):Pick("2 Seconds")
+Check("a pick in the swap interval saves it", ns.db.swapInterval == 2 and Control("Swap Every"):Text() == "2 Seconds")
+Control("Swap Every"):Pick("4 Seconds")
+Row("Swap Herbs and Minerals").frame.scripts.OnMouseUp(Row("Swap Herbs and Minerals").frame)
+Check("a click on the label stops it again", LiveTickers() == 0 and not ns.db.swap, LiveTickers())
+
+Check("the sound dropdown offers all six sounds", #Control("Sound"):Entries() == #ns.sounds)
 alerts = {}
-Setting("soundId"):SetValue(SOUNDKIT.RAID_WARNING)
-Check("picking a sound saves and previews it", ns.db.soundId == SOUNDKIT.RAID_WARNING and alerts[1] == SOUNDKIT.RAID_WARNING)
-Setting("soundId"):SetValue(SOUNDKIT.RAID_WARNING)
-Check("picking the same sound again writes nothing", #alerts == 1, #alerts .. " sounds")
+Control("Sound"):Pick("Raid Warning")
+Check("picking a sound saves and previews it", ns.db.soundId == SOUNDKIT.RAID_WARNING and alerts[1] == SOUNDKIT.RAID_WARNING
+  and Control("Sound"):Text() == "Raid Warning", Control("Sound"):Text())
 
-Setting("sound"):SetValue(false)
-local greyedOut = not Row("Sound"):IsEnabled()
-Setting("sound"):SetValue(true)
-Check("the sound picker greys out while the sound is off", greyedOut and Row("Sound"):IsEnabled())
-Check("minimap rows nest under their switch", Row("Gathering Nodes Only").parent == Row("Alert on Minimap Nodes")
-  and Row("Rares and Treasures").parent == Row("Alert on Minimap Nodes"))
-Check("the cooldown reads in seconds", Row("Cooldown").data.options.format(3) == "3 s")
+Control("Play a Sound"):Click()
+local greyedOut = IsGreyed("Sound") and not ns.db.sound
+Control("Play a Sound"):Click()
+Check("the sound picker greys out while the sound is off", greyedOut and IsLive("Sound") and ns.db.sound)
+Check("minimap rows depend on their switch", IsIndented("Gathering Nodes Only") and IsIndented("Rares and Treasures")
+  and not IsIndented("Alert on Minimap Nodes"))
+if not ns.db.blips then Control("Alert on Minimap Nodes"):Click() end
+Control("Alert on Minimap Nodes"):Click()
+Check("and grey out with it", IsGreyed("Gathering Nodes Only") and IsGreyed("Rares and Treasures"))
+Control("Gathering Nodes Only"):Click()
+Check("a greyed checkbox takes no click", ns.db.objectsOnly)
+Control("Alert on Minimap Nodes"):Click()
 
--- Blizzard's checkbox dropdown flips one option bit per click, so the harness does the same.
-local picker = Row("Node Types")
-local typeMask = Setting("mutedTypes")
-Check("the node types list only GatherMate2's Forever types", picker and #picker.data.options() == 2,
-  picker and #picker.data.options())
-Check("every type starts ticked", typeMask:GetValue() == 3 and picker.getSelectionTextFunc({ 1, 2 }) == "All")
-typeMask:SetValue(bit.bxor(typeMask:GetValue(), 2))
+local cooldown = Control("Cooldown")
+Check("the cooldown reads in seconds from 1 to 30", cooldown.formatters[MinimalSliderWithSteppersMixin.Label.Right](3) == "3 s"
+  and cooldown.minimum == 1 and cooldown.maximum == 30 and cooldown.steps == 29)
+cooldown:SetValue(10)
+Check("moving the slider saves the cooldown", ns.db.cooldown == 10)
+
+local picker = Control("Node Types")
+local function Picked() return picker:Text() end
+Check("the node types list only GatherMate2's Forever types", picker and #picker:Entries() == 2,
+  picker and #picker:Entries())
+Check("every type starts ticked", Picked() == "All", Picked())
+picker:Pick("Mining")
 Check("unticking a type mutes only that one", ns.db.mutedTypes.Mining and not ns.db.mutedTypes["Herb Gathering"])
-Check("a partial pick lists the ticked names", picker.getSelectionTextFunc({ 1 }) == nil)
-Check("no pick reads None", picker.getSelectionTextFunc({}) == "None")
-Check("node types nest under the GatherMate2 switch", picker.parent == Row("Also Ping at Spots GatherMate2 Remembers"))
+Check("a partial pick lists the ticked names", Picked() == "Herb Gathering", Picked())
+picker:Pick("Herb Gathering")
+Check("no pick reads None", Picked() == "None", Picked())
+picker:Pick("Herb Gathering")
+Check("node types depend on the GatherMate2 switch", IsIndented("Node Types") and IsLive("Node Types"))
+Control("Also Ping at Spots GatherMate2 Remembers"):Click()
+Check("and grey out with it", IsGreyed("Node Types") and not ns.db.gatherMate)
+Control("Also Ping at Spots GatherMate2 Remembers"):Click()
 
-Setting("cooldown"):SetValue(10)
-Setting("blips"):SetValue(false)
+Control("Alert on Minimap Nodes"):Click()
 ns.db.paused = true
-RestoreDefaults()
+alerts = {}
+PressDefaults()
 local drifted = {}
 for key, value in pairs(ns.defaults) do
   if type(value) ~= "table" and not STATE_KEYS[key] and ns.db[key] ~= value then drifted[#drifted + 1] = key end
 end
 table.sort(drifted)
 Check("Defaults restore every setting", #drifted == 0 and next(ns.db.mutedTypes) == nil, table.concat(drifted, ", "))
+Check("and the controls show them", Control("Alert on Minimap Nodes").checked == ns.defaults.blips
+  and cooldown.value == ns.defaults.cooldown and Picked() == "All" and IsGreyed("Node Types"))
 Check("Defaults keep the calibration and the pause", ns.db.space == "center" and ns.db.paused, tostring(ns.db.space))
+Check("Defaults play nothing", #alerts == 0, #alerts .. " sounds")
 ns.db.paused = false
-alerts = {}
-RestoreDefaults()
-Check("Defaults that change nothing play nothing", #alerts == 0, #alerts .. " sounds")
 
--- A button row taints Blizzard's pooled button frame, which its Social page reuses for a protected call.
-local buttons = {}
-for _, row in ipairs(panel.rows) do
-  if row.kind == "button" then buttons[#buttons + 1] = row.data.name end
-end
-Check("the panel has no button rows", #buttons == 0, table.concat(buttons, ", "))
+-- A page closed while something else changes reads it again on its next show.
+ClosePage()
+ns.db.flash = false
+OpenPage()
+Check("the page reads its values on every show", Control("Flash the Minimap Edge").checked == false)
+ns.db.flash = true
+OpenPage()
 
 alerts = {}
 SlashCmdList.BETTERTRACKING("test")
@@ -1097,10 +1252,11 @@ ns.db.space = "center"
 
 inCombat = true
 ClickLauncher("LeftButton")
-Check("a left click in combat waits", not panel.opened and chat[#chat] == PREFIX .. "Opens after combat.", chat[#chat])
+settingsPage.opened = nil
+Check("a left click in combat waits", not settingsPage.opened and chat[#chat] == PREFIX .. "Opens after combat.", chat[#chat])
 inCombat = false
 Fire("PLAYER_REGEN_ENABLED")
-Check("and opens the category once combat ends", panel.opened)
+Check("and opens the category once combat ends", settingsPage.opened == 42)
 
 SlashCmdList.BETTERTRACKING("minimap")
 Check("/tra minimap hides the button and says how to bring it back", not icons["Better Tracking"].shown and ns.db.minimap.hide
@@ -1136,11 +1292,10 @@ SetActive(nil)
 Advance(5)
 
 Check("the swap starts off", ns.db.swap == false and LiveTickers() == 0 and TooltipText()[3] == "Swap is off.")
-local notifiedBefore = Setting("swap").notified
 SlashCmdList.BETTERTRACKING("swap")
 Check("/tra swap turns it on with one line", ns.db.swap and LiveTickers() == 1
   and chat[#chat] == PREFIX .. "Herb and ore swap on.", chat[#chat])
-Check("and tells an open settings panel", Setting("swap").notified == notifiedBefore + 1)
+Check("and the open settings page ticks its checkbox", Control("Swap Herbs and Minerals").checked == true)
 
 Advance(1)
 Check("herbs come first when neither is on", #trackingCalls == 1 and LastCall().index == 1 and ActiveSpell().name == "Find Herbs",
@@ -1345,11 +1500,12 @@ Check("a later load prints no second hint", Said(HINT) == hintsBefore, (Said(HIN
 bare.db.space = "center"
 Check("the GatherMate2 source stays detached", not bare.gatherMateReady and hooks.addMiniPin == nil)
 Check("it offers no node types", #bare.GatherMateTypes() == 0)
-Check("the panel still builds", BuildPanel())
-Check("without an empty node types row", Row("Node Types") == nil and Setting("mutedTypes") == nil)
-Check("the GatherMate2 row is greyed", not Row("Also Ping at Spots GatherMate2 Remembers"):IsEnabled())
-Check("and its tooltip says why", Tooltip("Also Ping at Spots GatherMate2 Remembers"):find("Needs GatherMate2", 1, true) ~= nil)
-Check("the minimap rows stay live", Row("Alert on Minimap Nodes"):IsEnabled() and Row("Gathering Nodes Only"):IsEnabled())
+bare.db.blips = true
+Check("the page still builds", pcall(Login))
+Check("without an empty node types row", Row("Node Types") == nil and Row("Also Ping at Spots GatherMate2 Remembers"))
+Check("the GatherMate2 row is greyed", IsGreyed("Also Ping at Spots GatherMate2 Remembers"))
+Check("and its tooltip says why", RowTooltip("Also Ping at Spots GatherMate2 Remembers"):find("Needs GatherMate2", 1, true) ~= nil)
+Check("the minimap rows stay live", IsLive("Alert on Minimap Nodes") and IsLive("Gathering Nodes Only"))
 
 print("dropped timed swaps")
 dropTimed = true

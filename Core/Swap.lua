@@ -230,8 +230,8 @@ function ns.ToggleSwap()
   ns.db.swap = not ns.db.swap
   ns.ApplySwap()
 
-  -- The settings checkbox reads its value only when shown, so an open panel needs telling.
-  Settings.NotifyUpdate("BETTER_TRACKING_SWAP")
+  -- An open settings page needs telling, since its checkbox changes only on a click.
+  ns.SwapChanged()
 
   if not ns.db.swap then
     ns.Print("Herb and ore swap off.")

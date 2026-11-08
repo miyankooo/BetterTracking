@@ -41,7 +41,7 @@ local function OnClick(button)
   elseif button == "RightButton" then
     ns.TogglePause()
   else
-    ns.OpenOptions()
+    ns.OpenSettings()
   end
 end
 
