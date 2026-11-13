@@ -1,0 +1,61 @@
+name: Interface
+
+# Once a day, compare the toc's ## Interface with the live WoW Forever version (Blizzard product
+# wowf). When they differ, commit the new number to main as a fix: and, once the addon has had its
+# first release, release it: release-please opens the release pull request, this job merges it,
+# which tags vX.Y.Z, and starts release.yml's package job for that tag. A push or merge made with
+# GITHUB_TOKEN starts no workflow, so this job runs those steps itself. Before the first release
+# it only commits the new number. Run it by hand with `gh workflow run interface.yml`.
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  interface:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # X.Y.Z.build becomes X followed by Y and Z as two digits each: 1.60.1.70938 is 16001.
+      - id: bump
+        run: |
+          version=$(curl -fsSL https://us.version.battle.net/v2/products/wowf/versions | awk -F'|' '$1 == "us" { print $6 }')
+          IFS=. read -r x y z _ <<< "$version"
+          interface=$(printf '%d%02d%02d' "$x" "$y" "$z")
+          echo "Live WoW Forever $version, interface $interface"
+          [[ $interface =~ ^[1-9][0-9]{4,}$ ]]
+          sed -i "s/^## Interface:.*/## Interface: $interface/" *.toc
+          git diff --quiet && exit 0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -am "fix: loads on WoW Forever $x.$y.$z without the out-of-date notice"
+          git push
+          echo "released=$(jq 'length > 0' .release-please-manifest.json)" >> "$GITHUB_OUTPUT"
+
+      - if: steps.bump.outputs.released == 'true'
+        uses: googleapis/release-please-action@v4
+
+      - if: steps.bump.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --label 'autorelease: pending' --state open --json number --jq '.[0].number')
+          gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --squash
+          sleep 15
+
+      - id: release
+        if: steps.bump.outputs.released == 'true'
+        uses: googleapis/release-please-action@v4
+
+      - if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
